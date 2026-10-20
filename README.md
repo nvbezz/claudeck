@@ -26,7 +26,7 @@ Panel lateral en vivo para Claude Code: sesión, contexto, gasto, agentes, tarea
 | Sección | Contenido |
 |---|---|
 | **Sesión** | proyecto, estado (trabajando/listo), modelo y esfuerzo (clic para cambiarlos), barra de contexto, ritmo de gasto por hora, proyección del límite de 5 h, coste por turno |
-| **Agentes** | subagentes activos y terminados (listo, detenido, falló) con su tiempo |
+| **Agentes** | subagentes activos y terminados (listo, detenido, falló) con su tiempo; los terminados se ocultan solos tras `agentHideSeconds` |
 | **Tareas** | la lista de tareas de Claude con barra de avance; cuando todas están completadas se oculta sola tras `taskHideSeconds` |
 | **Archivos modificados** | archivos tocados en la sesión con líneas añadidas y quitadas |
 | **Git** | rama, ahead/behind, staged, sin stagear, sin seguimiento, cambios y últimos commits |
@@ -77,6 +77,7 @@ Todas las opciones son opcionales:
 | `notifyMinSeconds` | 30 | solo avisa de turnos que duraron al menos esto |
 | `mcpSeconds` | 180 | cada cuánto se consulta el estado de los MCP |
 | `taskHideSeconds` | 90 | segundos que se muestra la lista de tareas ya completada antes de ocultarse (0 = nunca) |
+| `agentHideSeconds` | 90 | segundos que un agente terminado sigue en la lista antes de ocultarse (0 = nunca) |
 | `isIcons` | true | iconos Nerd Font |
 | `bgColor` | `#1e1e2e` | fondo del panel, para igualar tu tema |
 

@@ -182,3 +182,26 @@ test('a commit with a long subject still shows its age', async ($, on) => {
   await ui.unmount()
   await settle()
 })
+
+test('a failed agent listing keeps the agents already shown instead of emptying them', async ($, on) => {
+  let calls = 0
+  stub(on, {
+    'tool.call': () => ({ result: {} }),
+    'agent.list': () => {
+      calls++
+      if (calls > 1) throw new Error('engine busy')
+      return { value: [{ id: 'a1', type: 'general-purpose', description: 'Contar hasta 40', status: 'running' }] }
+    },
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never)
+  await wait(100)
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never)
+  await wait(100)
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Contar hasta 40/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /el equipo duerme/ })).toBeFalsy()
+  await ui.unmount()
+  await settle()
+})

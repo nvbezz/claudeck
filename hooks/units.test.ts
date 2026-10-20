@@ -7,6 +7,7 @@ import { dayKey, series, spentPerDay } from './history'
 import { isSafeId } from './housekeeping'
 import { notifyCommand, openCommand, parseOs, soundCommand } from './platform'
 import { INITIAL } from './state'
+import { keepAgent } from './agents'
 import { isAllDone, settleTodos } from './tasks'
 import { visibleRows } from './explorer'
 import { parseCollapsed } from './ui'
@@ -171,4 +172,20 @@ test('taskHideSeconds accepts 0 and rejects garbage', () => {
   expect(readConfig({ taskHideSeconds: '30' } as never).taskHideSeconds).toBe(30)
   expect(readConfig({ taskHideSeconds: -5 } as never).taskHideSeconds).toBe(90)
   expect(readConfig({ taskHideSeconds: 'abc' } as never).taskHideSeconds).toBe(90)
+})
+
+test('keepAgent always shows a running agent and hides a finished one after the delay', () => {
+  expect(keepAgent(false, undefined, 5000, 90000)).toBe(true)
+  expect(keepAgent(false, 1000, 999999, 90000)).toBe(true)
+  expect(keepAgent(true, 1000, 90999, 90000)).toBe(true)
+  expect(keepAgent(true, 1000, 91000, 90000)).toBe(false)
+  expect(keepAgent(true, 1000, 999999999, 0)).toBe(true)
+  expect(keepAgent(true, undefined, 999999, 90000)).toBe(true)
+})
+
+test('agentHideSeconds accepts 0 and rejects garbage', () => {
+  expect(readConfig({} as never).agentHideSeconds).toBe(90)
+  expect(readConfig({ agentHideSeconds: 0 } as never).agentHideSeconds).toBe(0)
+  expect(readConfig({ agentHideSeconds: '15' } as never).agentHideSeconds).toBe(15)
+  expect(readConfig({ agentHideSeconds: -1 } as never).agentHideSeconds).toBe(90)
 })

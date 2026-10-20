@@ -85,7 +85,7 @@ export const register: Register = (on, options) => {
       }),
     )
     poll('git', 5000, 20000, () => refreshGit($))
-    $.clock.every(3000, () => void syncAgents($))
+    $.clock.every(3000, () => void syncAgents($, cfg.agentHideSeconds * 1000))
     poll('explorer', 8000, 30000, () => refreshExplorer($))
     $.clock.every(cfg.mcpSeconds * 1000, () => void refreshMcp($, cfg))
     $.clock.every(cfg.mcpSeconds * 3000, () => void refreshSkills($))
@@ -198,7 +198,7 @@ export const register: Register = (on, options) => {
     const run = { id: e.tool_use_id, label, since: Date.now() }
     if (e.agentId !== undefined) {
       noteActivity(e.agentId, label)
-      void syncAgents($)
+      void syncAgents($, cfg.agentHideSeconds * 1000)
     }
     await update($, panel, p => ({
       ...p,
@@ -277,7 +277,7 @@ export const register: Register = (on, options) => {
     try {
       return await next(e)
     } finally {
-      void syncAgents($)
+      void syncAgents($, cfg.agentHideSeconds * 1000)
     }
   })
 

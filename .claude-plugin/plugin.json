@@ -74,6 +74,12 @@
       "description": "Seconds a fully completed task list stays on screen before it is hidden. 0 keeps it.",
       "default": 90
     },
+    "agentHideSeconds": {
+      "type": "number",
+      "title": "Hide finished agents after (s)",
+      "description": "Seconds a finished agent stays listed before it is hidden. 0 keeps it.",
+      "default": 90
+    },
     "isIcons": {
       "type": "boolean",
       "title": "Nerd Font icons",

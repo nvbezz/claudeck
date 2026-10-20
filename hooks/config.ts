@@ -10,6 +10,7 @@ export type Config = {
   notifyMinSeconds: number
   mcpSeconds: number
   taskHideSeconds: number
+  agentHideSeconds: number
   isIcons: boolean
   bgColor: string | undefined
 }
@@ -38,6 +39,7 @@ export const readConfig = (options: PluginOptions): Config => ({
   notifyMinSeconds: num(options.notifyMinSeconds, 30),
   mcpSeconds: num(options.mcpSeconds, 180),
   taskHideSeconds: secs(options.taskHideSeconds, 90),
+  agentHideSeconds: secs(options.agentHideSeconds, 90),
   isIcons: flag(options.isIcons, true),
   bgColor: typeof options.bgColor === 'string' && options.bgColor.trim() !== '' ? options.bgColor.trim() : '#1e1e2e',
 })
