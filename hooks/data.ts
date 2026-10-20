@@ -20,10 +20,13 @@ async function width($: Dollar, cfg: Config): Promise<number> {
   return typeof saved === 'number' && saved >= 30 ? saved : cfg.width
 }
 
-export async function openPane($: Dollar, cfg: Config): Promise<void> {
+// The engine draws a pane that nobody asked for only from ~144 columns (110 once asked); narrower, it waits undrawn.
+export async function openPane($: Dollar, cfg: Config): Promise<{ isPlaced: boolean; reason?: string }> {
   const columns = await width($, cfg)
   await $.ui.open({ id: FILES, title: cfg.isIcons ? '\u{f0645} Archivos' : 'Archivos', columns })
-  await $.ui.open({ id: PANE, title: cfg.isIcons ? '\u{f056e} Panel' : 'Panel', columns })
+  const placed = await $.ui.open({ id: PANE, title: cfg.isIcons ? '\u{f056e} Panel' : 'Panel', columns })
+
+  return placed.isPlaced ? { isPlaced: true } : { isPlaced: false, reason: placed.reason }
 }
 
 export async function openFiles($: Dollar, cfg: Config): Promise<void> {

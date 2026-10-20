@@ -111,7 +111,7 @@ Si ves cuadros o símbolos raros, tu terminal no tiene Nerd Font. Pon `isIcons` 
 
 | Síntoma | Qué probar |
 |---|---|
-| El panel no aparece | reinicia Claude Code, escribe `/panel` y mira `claude plugin list` |
+| El panel no aparece, o se oculta solo | la terminal es demasiado estrecha: el motor solo dibuja un panel que se abre solo desde unas 144 columnas (unas 110 si lo abres tú con `/panel`). Ensancha la ventana, baja el zoom de la fuente o escribe `/panel`; al ensancharla vuelve sin hacer nada. Si no, reinicia Claude Code y mira `claude plugin list` |
 | `claude plugin validate ~/claudeck` falla | actualiza Claude Code: el panel usa API de mods recientes |
 | La sección MCP dice "consultando…" mucho rato | normal si algún servidor tarda en responder; se reintenta cada `mcpSeconds` |
 | La sección Tareas siempre dice "sin plan aún" | habilita las herramientas de tareas para todos los modelos (paso 4) |

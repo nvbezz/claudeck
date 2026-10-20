@@ -223,3 +223,24 @@ test('a turn without a session id never files its cost under "undefined"', async
   expect(JSON.stringify(written).includes('undefined')).toBe(false)
   expect(written.length).toBe(0)
 })
+
+test('/panel says why it is not drawn when the terminal is too narrow', async ($, on) => {
+  stub(on, { 'ui.open': () => ({ value: { isPlaced: false, reason: 'terminal too narrow' } }) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const out = await $.command.run({ command: 'panel', args: '' } as never)
+  const text = (out as { text?: string }).text ?? ''
+
+  expect(text.includes('not drawn')).toBe(true)
+  expect(text.includes('terminal too narrow')).toBe(true)
+  await settle()
+})
+
+test('/panel keeps its plain answer when the pane is drawn', async ($, on) => {
+  stub(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const out = await $.command.run({ command: 'panel', args: '' } as never)
+  const text = (out as { text?: string }).text ?? ''
+
+  expect(text).toBe('Panel opened. Close it with its close mark.')
+  await settle()
+})

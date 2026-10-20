@@ -52,7 +52,12 @@ export const register: Register = (on, options) => {
 
     mark($, await $.session.id(), 'clear')
     void pruneStale($)
-    void initExplorer($).then(() => openPane($, cfg))
+    void initExplorer($)
+      .then(() => openPane($, cfg))
+      .then(opened => {
+        if (!opened.isPlaced) $.ui.toast('claudeck: la terminal es muy estrecha para el panel; ensánchala o escribe /panel')
+      })
+      .catch(() => {})
     void loadHistory($)
     void refresh($, cfg)
     void refreshGit($)
@@ -94,9 +99,13 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'panel' }, async $ => {
-    await openPane($, cfg)
+    const opened = await openPane($, cfg)
 
-    return { text: 'Panel opened. Close it with its close mark.' }
+    return {
+      text: opened.isPlaced
+        ? 'Panel opened. Close it with its close mark.'
+        : `Panel not drawn yet: ${opened.reason ?? 'the terminal is too narrow'}. Widen the terminal; it appears by itself.`,
+    }
   })
 
   on('command.run', { command: 'archivos' }, async $ => {
