@@ -6,6 +6,7 @@ import { clip, duration, effortView, fitCommit, lineDiff, prettyModel, project, 
 import { dayKey, series, spentPerDay } from './history'
 import { isSafeId } from './housekeeping'
 import { notifyCommand, openCommand, parseOs, soundCommand } from './platform'
+import { FILES, MAX_HEAL_TRIES, PANE, healPanes } from './data'
 import { INITIAL } from './state'
 import { keepAgent } from './agents'
 import { isAllDone, settleTodos } from './tasks'
@@ -188,4 +189,62 @@ test('agentHideSeconds accepts 0 and rejects garbage', () => {
   expect(readConfig({ agentHideSeconds: 0 } as never).agentHideSeconds).toBe(0)
   expect(readConfig({ agentHideSeconds: '15' } as never).agentHideSeconds).toBe(15)
   expect(readConfig({ agentHideSeconds: -1 } as never).agentHideSeconds).toBe(90)
+})
+
+// A stand-in for `$` with just what healPanes touches.
+const fakeUi = (panes: { id: string; isPlaced: boolean }[] | 'fail') => {
+  const opened: string[] = []
+  const $ = {
+    store: { get: async () => undefined },
+    ui: {
+      panes: async () => (panes === 'fail' ? Promise.reject(new Error('gone')) : panes),
+      open: async (args: { id: string }) => {
+        opened.push(args.id)
+        return { isPlaced: true }
+      },
+    },
+  }
+
+  return { $: $ as never, opened }
+}
+const cfgOf = readConfig({} as never)
+
+test('healPanes leaves alone panes that are drawn', async () => {
+  const { $, opened } = fakeUi([{ id: FILES, isPlaced: true }, { id: PANE, isPlaced: true }])
+  const state = { tries: 5 }
+  expect(await healPanes($, cfgOf, new Set(), state)).toEqual([])
+  expect(opened).toEqual([])
+  expect(state.tries).toBe(0)
+})
+
+test('healPanes reopens a pane that is gone or undrawn, files first', async () => {
+  const gone = fakeUi([{ id: FILES, isPlaced: true }])
+  expect(await healPanes(gone.$, cfgOf, new Set(), { tries: 0 })).toEqual([PANE])
+  expect(gone.opened).toEqual([PANE])
+  const undrawn = fakeUi([{ id: FILES, isPlaced: false }, { id: PANE, isPlaced: false }])
+  await healPanes(undrawn.$, cfgOf, new Set(), { tries: 0 })
+  expect(undrawn.opened).toEqual([FILES, PANE])
+  const none = fakeUi([])
+  await healPanes(none.$, cfgOf, new Set(), { tries: 0 })
+  expect(none.opened).toEqual([FILES, PANE])
+})
+
+test('healPanes respects a pane the person closed', async () => {
+  const { $, opened } = fakeUi([])
+  await healPanes($, cfgOf, new Set([PANE]), { tries: 0 })
+  expect(opened).toEqual([FILES])
+  const both = fakeUi([])
+  expect(await healPanes(both.$, cfgOf, new Set([PANE, FILES]), { tries: 0 })).toEqual([])
+  expect(both.opened).toEqual([])
+})
+
+test('healPanes survives a failing listing and stops after too many tries', async () => {
+  const broken = fakeUi('fail')
+  expect(await healPanes(broken.$, cfgOf, new Set(), { tries: 0 })).toEqual([])
+  expect(broken.opened).toEqual([])
+  const stuck = fakeUi([])
+  const state = { tries: 0 }
+  for (let i = 0; i < MAX_HEAL_TRIES + 5; i++) await healPanes(stuck.$, cfgOf, new Set(), state)
+  expect(stuck.opened.length).toBe(MAX_HEAL_TRIES * 2)
+  expect(state.tries).toBe(MAX_HEAL_TRIES)
 })

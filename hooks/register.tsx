@@ -5,7 +5,7 @@ import { ping } from './alerts'
 import { readConfig } from './config'
 import { noteActivity, syncAgents } from './agents'
 import { loadEffort } from './controls'
-import { FILES, PANE, openFiles, openPane, refresh, refreshGit, refreshMcp, refreshSkills } from './data'
+import { FILES, PANE, healPanes, openFiles, openPane, refresh, refreshGit, refreshMcp, refreshSkills } from './data'
 import { initExplorer, refreshExplorer, setQuery, wheel } from './explorer'
 import { renderFiles } from './filesView'
 import { base, clip, duration, lineDiff, money, spark } from './format'
@@ -38,6 +38,9 @@ const TEST_RE =
 
 export const register: Register = (on, options) => {
   const cfg = readConfig(options)
+  // Panes the person closed by hand: they stay closed until asked for again.
+  const closed = new Set<string>()
+  const heal = { tries: 0 }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'panel', description: 'Show or hide the dashboard pane' })
@@ -50,6 +53,8 @@ export const register: Register = (on, options) => {
     const collapsed = parseCollapsed(await $.store.get('ui'))
     await update($, panel, p => ({ ...p, collapsed }))
 
+    closed.clear()
+    heal.tries = 0
     mark($, await $.session.id(), 'clear')
     void pruneStale($)
     void initExplorer($)
@@ -91,6 +96,7 @@ export const register: Register = (on, options) => {
     )
     poll('git', 5000, 20000, () => refreshGit($))
     $.clock.every(3000, () => void syncAgents($, cfg.agentHideSeconds * 1000))
+    $.clock.every(3000, () => void healPanes($, cfg, closed, heal).catch(() => {}))
     poll('explorer', 8000, 30000, () => refreshExplorer($))
     $.clock.every(cfg.mcpSeconds * 1000, () => void refreshMcp($, cfg))
     $.clock.every(cfg.mcpSeconds * 3000, () => void refreshSkills($))
@@ -98,7 +104,15 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  on('ui.close', async ($, e, next) => {
+    if (e.origin.kind === 'person') closed.add(e.id)
+
+    return next(e)
+  })
+
   on('command.run', { command: 'panel' }, async $ => {
+    closed.clear()
+    heal.tries = 0
     const opened = await openPane($, cfg)
 
     return {
@@ -109,6 +123,7 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'archivos' }, async $ => {
+    closed.delete(FILES)
     await openFiles($, cfg)
 
     return { text: 'File explorer opened.' }

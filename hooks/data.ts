@@ -20,6 +20,32 @@ async function width($: Dollar, cfg: Config): Promise<number> {
   return typeof saved === 'number' && saved >= 30 ? saved : cfg.width
 }
 
+const titleOf = (cfg: Config, id: string): string =>
+  id === FILES ? (cfg.isIcons ? '\u{f0645} Archivos' : 'Archivos') : cfg.isIcons ? '\u{f056e} Panel' : 'Panel'
+
+export const MAX_HEAL_TRIES = 20
+
+// The engine can leave a pane undrawn (a window or tab switch, a detached surface) and does not always bring it back.
+// Reopen what is missing or unplaced, except what the person closed by hand; give up after a run of failed tries,
+// so a pane that cannot be drawn does not loop forever. Returns the ids it tried to reopen.
+export async function healPanes($: Dollar, cfg: Config, closed: ReadonlySet<string>, state: { tries: number }): Promise<string[]> {
+  const wanted = [FILES, PANE].filter(id => !closed.has(id))
+  if (wanted.length === 0) return []
+  const open = await $.ui.panes().catch(() => undefined)
+  if (open === undefined) return []
+  const missing = wanted.filter(id => open.find(one => one.id === id)?.isPlaced !== true)
+  if (missing.length === 0) {
+    state.tries = 0
+    return []
+  }
+  if (state.tries >= MAX_HEAL_TRIES) return []
+  state.tries++
+  const columns = await width($, cfg)
+  for (const id of missing) await $.ui.open({ id, title: titleOf(cfg, id), columns }).catch(() => undefined)
+
+  return missing
+}
+
 // The engine draws a pane that nobody asked for only from ~144 columns (110 once asked); narrower, it waits undrawn.
 export async function openPane($: Dollar, cfg: Config): Promise<{ isPlaced: boolean; reason?: string }> {
   const columns = await width($, cfg)
