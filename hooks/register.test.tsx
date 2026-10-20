@@ -160,3 +160,25 @@ test('session start prunes stale state files and session end removes its own', a
   expect(ran.some(c => c.includes('rm -f') && c.endsWith('sh s1'))).toBe(true)
   await settle()
 })
+
+test('a commit with a long subject still shows its age', async ($, on) => {
+  const subject = 'docs: add screenshots and capture guide for the readme file'
+  stub(on, {
+    'session.cwd': () => ({ value: '/p' }),
+    'process.run': (_: unknown, e: { argv: string[] }) => {
+      const cmd = e.argv.join(' ')
+      if (cmd.startsWith('git rev-parse --abbrev-ref HEAD')) return { value: { exitCode: 0, stdout: 'main\n', stderr: '' } }
+      if (cmd.startsWith('git rev-parse --show-toplevel')) return { value: { exitCode: 0, stdout: '/p\n', stderr: '' } }
+      if (cmd.startsWith('git log')) return { value: { exitCode: 0, stdout: `abc1234\x1f${subject}\x1f${Math.floor(Date.now() / 1000)}\x1fme`, stderr: '' } }
+      return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    },
+  })
+  await $.session.start({ cwd: '/p', surface: 'terminal', isInteractive: true })
+  await wait(80)
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /ahora/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /abc1234/ })).toBeTruthy()
+  await ui.unmount()
+  await settle()
+})

@@ -8,6 +8,7 @@ import {
   compact,
   duration,
   effortView,
+  fitCommit,
   isFiveHour,
   level,
   money,
@@ -427,7 +428,7 @@ export async function renderPanel($: Dollar, e: RenderInputOf<'Pane', RenderSurf
               <Line>
                 <Text color={i === 0 ? 'claude' : 'subtle'}>{i === 0 ? '◉' : i === SLOTS - 1 || p.commits[i + 1] === undefined ? '╰' : '├'}─ </Text>
                 <Text color="suggestion">{c.hash} </Text>
-                <Text>{c.subject}</Text>
+                <Text>{fitCommit(c.subject, inner, ago(p.now - c.at))}</Text>
                 <Text dimColor> {ago(p.now - c.at)}</Text>
               </Line>
             ),

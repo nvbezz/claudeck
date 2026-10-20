@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { readConfig } from './config'
 import { EFFORTS } from './controls'
-import { clip, duration, effortView, lineDiff, prettyModel, project, spark, until } from './format'
+import { clip, duration, effortView, fitCommit, lineDiff, prettyModel, project, spark, until } from './format'
 import { dayKey, series, spentPerDay } from './history'
 import { isSafeId } from './housekeeping'
 import { notifyCommand, openCommand, parseOs, soundCommand } from './platform'
@@ -133,4 +133,12 @@ test('visibleRows hides dotfiles and ignored folders, marks dirty folders, and c
   expect(visibleRows({ ...ex, isHidden: true }, {}).length).toBe(5)
   const many = { ...ex, open: [], listing: { '/p': Array.from({ length: 900 }, (_, i) => ({ name: `f${i}`, kind: 'file' as const })) } }
   expect(visibleRows(many, {}).length).toBe(400)
+})
+
+test('fitCommit shortens the subject so the age always fits', () => {
+  expect(fitCommit('fix: short', 42, '5m')).toBe('fix: short')
+  const long = fitCommit('docs: add screenshots and capture guide for the readme', 42, 'ahora')
+  expect(long.endsWith('…')).toBe(true)
+  expect(3 + 8 + long.length + 1 + 'ahora'.length <= 39).toBe(true)
+  expect(fitCommit('x'.repeat(100), 10, '3d').length).toBe(8)
 })

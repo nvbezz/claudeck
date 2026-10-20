@@ -112,3 +112,7 @@ export const effortView = (
 
   return { index, label: known[index]?.label ?? effort, dots: '●'.repeat(index + 1) + '○'.repeat(known.length - index - 1) }
 }
+
+// A commit row is "├─ hash subject age": the subject gives way so the age never falls off the panel's edge.
+export const fitCommit = (subject: string, inner: number, age: string): string =>
+  clip(subject, Math.max(8, inner - 3 - 3 - 8 - 1 - age.length))
