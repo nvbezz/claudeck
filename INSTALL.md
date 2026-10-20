@@ -74,6 +74,29 @@ echo '{"width":"52"}' | claude plugin configure claudeck --values-stdin   # guar
 
 Las opciones están en el [README](README.md#configuración).
 
+## 6. Barra de estado inferior (opcional)
+
+Claudeck trae también una status line para la parte baja de la terminal. Solo Linux; necesita `jq` y `bash` 4.2 o superior (`bash --version`).
+
+1. Instala `jq` si no lo tienes (`sudo dnf install jq`, `sudo apt install jq`…).
+2. Añade esto a `~/.claude/settings.json`, junto a lo que ya tengas:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/claudeck/statusline/claudeck-statusline.sh",
+    "refreshInterval": 5
+  }
+}
+```
+
+3. Reinicia Claude Code.
+
+La fila de agentes de esa barra se alimenta de los archivos que escribe el panel, así que necesitas Claudeck cargado (paso 2). Para comprobar el script por separado: `bash ~/claudeck/statusline/test.sh`.
+
+Si ya tenías una status line propia, esto la sustituye. Si algo falla, quita la clave `statusLine` y vuelve a la anterior.
+
 ## Sin iconos
 
 Si ves cuadros o símbolos raros, tu terminal no tiene Nerd Font. Pon `isIcons` en `false` (ver paso 5), o instala una fuente desde <https://www.nerdfonts.com>.
@@ -93,6 +116,8 @@ Si ves cuadros o símbolos raros, tu terminal no tiene Nerd Font. Pon `isIcons` 
 | La sección MCP dice "consultando…" mucho rato | normal si algún servidor tarda en responder; se reintenta cada `mcpSeconds` |
 | La sección Tareas siempre dice "sin plan aún" | habilita las herramientas de tareas para todos los modelos (paso 4) |
 | La sección Git dice "sin repositorio" | no estás dentro de un repo; ejecuta `git init` |
+| La barra inferior dice "jq is required" | instala `jq` (paso 6) |
+| La barra inferior no muestra cpu ni ram | solo funciona en Linux, porque lee `/proc` |
 | No hay sonido ni notificación | revisa los paquetes de la sección anterior |
 
 ## Desinstalar

@@ -21,6 +21,12 @@ Panel lateral en vivo para Claude Code: sesión, contexto, gasto, agentes, tarea
 
 *El explorador de archivos, con vista previa de código.*
 
+<p>
+  <img src="docs/06-barra-inferior.png" alt="Barra de estado inferior de Claudeck" width="100%">
+</p>
+
+*La barra de estado inferior: proyecto y rama, modelo y esfuerzo, contexto y coste, límites de 5 h y semanal, cpu, ram y agentes.*
+
 ## Qué muestra
 
 | Sección | Contenido |
@@ -39,6 +45,12 @@ Panel lateral en vivo para Claude Code: sesión, contexto, gasto, agentes, tarea
 Claudeck **observa tu sesión actual; no reemplaza a `tmux` ni a un gestor de terminales.** Muestra los subagentes de la sesión en la que está cargado, pero no lanza ni organiza agentes, ni muestra otras sesiones de Claude Code abiertas en paralelo, ni mantiene vivo el trabajo si cierras la terminal. Para varias sesiones a la vez o para que sobrevivan al cierre, sigue valiendo la pena un gestor como `tmux`. Los compañeros de equipo (`teammates`) tampoco aparecen en la lista de agentes.
 
 Además avisa con sonido y notificación de escritorio cuando un turno largo termina, cuando el contexto se llena, cuando te acercas al límite de 5 h o cuando un servidor MCP se cae.
+
+## Barra de estado inferior
+
+El paquete incluye también una **status line** para la parte baja de la terminal, en `statusline/claudeck-statusline.sh`: carpeta y rama git (con `*` si hay cambios), modelo y esfuerzo, barra de contexto, coste de la sesión con una gráfica de 7 días, límites de 5 h y semanal con cuenta atrás, cpu, ram y los subagentes en marcha con lo que hace cada uno. Se activa como se explica en [INSTALL.md](INSTALL.md#6-barra-de-estado-inferior-opcional).
+
+Es **solo para Linux** (lee `/proc` y usa utilidades de GNU) y necesita `bash` 4.2 o superior y `jq`. En macOS no funcionará tal cual; la [guía para agentes](AGENT_GUIDE.md#6-integración-opcional-con-la-status-line) explica cómo adaptarla.
 
 ## Comandos
 
@@ -108,7 +120,8 @@ A nosotros nos pasó exactamente eso, y con esa variable se resolvió.
 ## Desarrollo
 
 ```bash
-claude plugin test .       # tests
+claude plugin test .       # tests del panel
+bash statusline/test.sh    # tests de la barra inferior
 claude plugin validate .   # validación del manifiesto
 npx -p typescript tsc --noEmit -p .   # tipos
 ```

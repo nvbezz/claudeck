@@ -117,6 +117,8 @@ El SO se detecta una vez con `uname -s`. Si tu sistema es otro, añade un caso e
 
 ## 6. Integración opcional con la status line
 
+El repo trae una status line lista en `statusline/claudeck-statusline.sh` (con su `statusline/test.sh`). Se enchufa con `statusLine` en `settings.json`, tipo `command`. Recibe un JSON por stdin con la carpeta, el modelo, el contexto, el coste, los límites, el esfuerzo y el id de sesión, y pinta dos filas más la de agentes. Es solo Linux: lee `/proc/stat` y `/proc/meminfo` y usa `stat -c` y `date -d` de GNU, además de `printf '%(...)T'` de bash 4.2. Para macOS hay que sustituir esas piezas (por ejemplo `sysctl`, `vm_stat`, `stat -f %m` y `date -j -f`) y conviene una versión reciente de bash. Mantén el test de humo pasando.
+
 El panel escribe dos tipos de archivo en `~/.claude/state/` por si quieres leerlos desde tu propia status line:
 
 - `working-<sessionId>`: una línea `start <epoch>` mientras hay un turno en marcha, `done <epoch>` al acabar. Se actualiza (`touch`) con cada herramienta.
