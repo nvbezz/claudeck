@@ -46,4 +46,5 @@ export const INITIAL: Panel = {
   week: 0,
   alerted: [],
   collapsed: [],
+  todosDoneAt: undefined,
 }

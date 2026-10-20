@@ -68,6 +68,12 @@
       "description": "How often the MCP server list is refreshed.",
       "default": 180
     },
+    "taskHideSeconds": {
+      "type": "number",
+      "title": "Hide finished tasks after (s)",
+      "description": "Seconds a fully completed task list stays on screen before it is hidden. 0 keeps it.",
+      "default": 90
+    },
     "isIcons": {
       "type": "boolean",
       "title": "Nerd Font icons",

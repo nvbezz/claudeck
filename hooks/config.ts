@@ -9,6 +9,7 @@ export type Config = {
   isDesktop: boolean
   notifyMinSeconds: number
   mcpSeconds: number
+  taskHideSeconds: number
   isIcons: boolean
   bgColor: string | undefined
 }
@@ -16,6 +17,12 @@ export type Config = {
 const num = (value: unknown, fallback: number): number => {
   const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
   return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+// Like num, but 0 is a real answer ("never").
+const secs = (value: unknown, fallback: number): number => {
+  const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
+  return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : fallback
 }
 
 const flag = (value: unknown, fallback: boolean): boolean =>
@@ -30,6 +37,7 @@ export const readConfig = (options: PluginOptions): Config => ({
   isDesktop: flag(options.isDesktop, true),
   notifyMinSeconds: num(options.notifyMinSeconds, 30),
   mcpSeconds: num(options.mcpSeconds, 180),
+  taskHideSeconds: secs(options.taskHideSeconds, 90),
   isIcons: flag(options.isIcons, true),
   bgColor: typeof options.bgColor === 'string' && options.bgColor.trim() !== '' ? options.bgColor.trim() : '#1e1e2e',
 })

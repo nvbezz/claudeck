@@ -12,6 +12,7 @@ import { base, clip, duration, lineDiff, money, spark } from './format'
 import { pruneStale, removeOwn } from './housekeeping'
 import { loadHistory, recordCost } from './history'
 import { INITIAL } from './state'
+import { settleTodos } from './tasks'
 import { parseCollapsed } from './ui'
 import { renderPanel } from './view'
 import type { Panel } from '../types'
@@ -75,7 +76,14 @@ export const register: Register = (on, options) => {
           await work()
         })().catch(() => {})
       })
-    poll('tick', 1000, 2000, () => update($, panel, p => ({ ...p, now: Date.now() })))
+    poll('tick', 1000, 2000, () =>
+      update($, panel, p => {
+        const now = Date.now()
+        const settled = settleTodos(p.todos, p.todosDoneAt, now, cfg.taskHideSeconds * 1000)
+
+        return { ...p, now, todos: settled.todos, todosDoneAt: settled.doneAt }
+      }),
+    )
     poll('git', 5000, 20000, () => refreshGit($))
     $.clock.every(3000, () => void syncAgents($))
     poll('explorer', 8000, 30000, () => refreshExplorer($))

@@ -51,7 +51,7 @@ Dos paneles acoplados, ambos con el ancho configurable:
 
 1. **Sesión:** carpeta del proyecto, indicador trabajando/listo con spinner, modelo y esfuerzo (botones que despliegan una lista; al elegir ejecutan `/model <id>` y `/effort <nivel>` vía `$.command.run`), barra de contexto con degradado, ritmo en $/hora, proyección de cuándo se llena el límite de 5 h, mini-gráfica de coste por turno, recuento de herramientas usadas y cuántas corren en paralelo.
 2. **Agentes:** subagentes de `$.agent.list()`, activos primero, con duración; terminados como listo/detenido/falló. Sin agentes, un dibujo de reposo.
-3. **Tareas:** lista de tareas con barra de avance; en curso primero, luego pendientes, luego completadas (tachadas). Máximo 4 filas visibles.
+3. **Tareas:** lista de tareas con barra de avance; en curso primero, luego pendientes, luego completadas (tachadas). Máximo 4 filas visibles. Cuando todas están completadas, se anota el momento (`todosDoneAt`) y, pasados `taskHideSeconds` (90 por defecto, 0 = nunca), la lista se vacía para que un plan nuevo empiece limpio.
 4. **Archivos modificados:** por archivo, líneas añadidas y quitadas, con barra proporcional.
 5. **Git:** rama, upstream, ahead/behind, staged/sin stagear/sin seguimiento, 3 cambios y 4 commits recientes. Sin repo, un dibujo con "git init".
 6. **MCP y tests:** estado de cada servidor MCP y resultado del último `test/build/lint` ejecutado.
@@ -63,7 +63,7 @@ Dos paneles acoplados, ambos con el ancho configurable:
 
 **Alertas** (toast + sonido + notificación de escritorio): turno largo terminado (`e.reason === 'answer'` y duración mínima), contexto ≥ `ctxCrit`, límite 5 h ≥ `limitWarn`, servidor MCP que pasa de conectado a caído. Cada alerta tiene histéresis de 5 puntos para no repetirse.
 
-**Opciones** (`userConfig` del manifiesto): `width`, `ctxWarn`, `ctxCrit`, `limitWarn`, `isSound`, `isDesktop`, `notifyMinSeconds`, `mcpSeconds`, `isIcons`, `bgColor`. Valida todo: llegan como string o number; usa valores por defecto si son basura.
+**Opciones** (`userConfig` del manifiesto): `width`, `ctxWarn`, `ctxCrit`, `limitWarn`, `isSound`, `isDesktop`, `notifyMinSeconds`, `mcpSeconds`, `taskHideSeconds`, `isIcons`, `bgColor`. Valida todo: llegan como string o number; usa valores por defecto si son basura.
 
 ## 3. De dónde sale cada dato
 

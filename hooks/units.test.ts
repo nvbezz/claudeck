@@ -7,6 +7,7 @@ import { dayKey, series, spentPerDay } from './history'
 import { isSafeId } from './housekeeping'
 import { notifyCommand, openCommand, parseOs, soundCommand } from './platform'
 import { INITIAL } from './state'
+import { isAllDone, settleTodos } from './tasks'
 import { visibleRows } from './explorer'
 import { parseCollapsed } from './ui'
 
@@ -141,4 +142,33 @@ test('fitCommit shortens the subject so the age always fits', () => {
   expect(long.endsWith('…')).toBe(true)
   expect(3 + 8 + long.length + 1 + 'ahora'.length <= 39).toBe(true)
   expect(fitCommit('x'.repeat(100), 10, '3d').length).toBe(8)
+})
+
+const done = (id: string) => ({ id, content: id, status: 'completed' as const })
+const open = (id: string) => ({ id, content: id, status: 'pending' as const })
+
+test('settleTodos waits for the whole list, then hides it after the delay', () => {
+  expect(isAllDone([])).toBe(false)
+  expect(settleTodos([], undefined, 1000, 90000)).toEqual({ todos: [], doneAt: undefined })
+  const mixed = [done('a'), open('b')]
+  expect(settleTodos(mixed, 500, 1000, 90000)).toEqual({ todos: mixed, doneAt: undefined })
+  const all = [done('a'), done('b')]
+  expect(settleTodos(all, undefined, 1000, 90000)).toEqual({ todos: all, doneAt: 1000 })
+  expect(settleTodos(all, 1000, 90999, 90000)).toEqual({ todos: all, doneAt: 1000 })
+  expect(settleTodos(all, 1000, 91000, 90000)).toEqual({ todos: [], doneAt: undefined })
+})
+
+test('settleTodos restarts the clock when a finished list gets a new task, and 0 keeps it forever', () => {
+  const all = [done('a')]
+  const reopened = [done('a'), open('b')]
+  expect(settleTodos(reopened, 1000, 200000, 90000).doneAt).toBeUndefined()
+  expect(settleTodos(all, 1000, 999999999, 0)).toEqual({ todos: all, doneAt: 1000 })
+})
+
+test('taskHideSeconds accepts 0 and rejects garbage', () => {
+  expect(readConfig({} as never).taskHideSeconds).toBe(90)
+  expect(readConfig({ taskHideSeconds: 0 } as never).taskHideSeconds).toBe(0)
+  expect(readConfig({ taskHideSeconds: '30' } as never).taskHideSeconds).toBe(30)
+  expect(readConfig({ taskHideSeconds: -5 } as never).taskHideSeconds).toBe(90)
+  expect(readConfig({ taskHideSeconds: 'abc' } as never).taskHideSeconds).toBe(90)
 })

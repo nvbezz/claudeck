@@ -72,6 +72,7 @@ export type Panel = {
   week: number
   alerted: string[]
   collapsed: Section[]
+  todosDoneAt: number | undefined
 }
 
 declare module 'claude-code' {
