@@ -34,6 +34,10 @@ Panel lateral en vivo para Claude Code: sesión, contexto, gasto, agentes, tarea
 | **Skills y plugins** | cuántas skills hay por origen y qué plugins están activos |
 | **Explorador** | pestaña aparte para navegar carpetas, previsualizar archivos, buscar y mencionar con `@` |
 
+## Alcance
+
+Claudeck **observa tu sesión actual; no reemplaza a `tmux` ni a un gestor de terminales.** Muestra los subagentes de la sesión en la que está cargado, pero no lanza ni organiza agentes, ni muestra otras sesiones de Claude Code abiertas en paralelo, ni mantiene vivo el trabajo si cierras la terminal. Para varias sesiones a la vez o para que sobrevivan al cierre, sigue valiendo la pena un gestor como `tmux`. Los compañeros de equipo (`teammates`) tampoco aparecen en la lista de agentes.
+
 Además avisa con sonido y notificación de escritorio cuando un turno largo termina, cuando el contexto se llena, cuando te acercas al límite de 5 h o cuando un servidor MCP se cae.
 
 ## Comandos
