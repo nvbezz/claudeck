@@ -43,6 +43,10 @@ export const register: Register = (on, options) => {
   const heal = { tries: 0 }
 
   on('session.start', async ($, e, next) => {
+    // The panel is for the terminal only: the VS Code extension runs with another entrypoint.
+    const entry = await $.process.run(['sh', '-c', 'printf %s "$CLAUDE_CODE_ENTRYPOINT"'], { timeoutMs: 3000 }).catch(() => undefined)
+    if (entry !== undefined && entry.stdout.trim() !== '' && entry.stdout.trim() !== 'cli') return next(e)
+
     await $.command.register({ name: 'panel', description: 'Show or hide the dashboard pane' })
     await $.command.register({ name: 'archivos', description: 'Open the file explorer tab' })
     await $.command.register({ name: 'buscar', description: 'Search files by name in the explorer (empty clears)' })
