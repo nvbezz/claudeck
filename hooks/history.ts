@@ -57,7 +57,8 @@ export async function loadHistory($: Dollar): Promise<void> {
 }
 
 export async function recordCost($: Dollar, usd: number | undefined, sessionId: string): Promise<void> {
-  if (usd === undefined || sessionId === '') return
+  // The id can be missing at runtime even though it is typed: never file a cost under "undefined".
+  if (usd === undefined || typeof sessionId !== 'string' || sessionId === '') return
   const raw = await $.store.get(KEY)
   const days: Days = isDays(raw) ? raw : {}
   const today = dayKey(Date.now())

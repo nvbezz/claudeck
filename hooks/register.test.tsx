@@ -205,3 +205,21 @@ test('a failed agent listing keeps the agents already shown instead of emptying 
   await ui.unmount()
   await settle()
 })
+
+test('a turn without a session id never files its cost under "undefined"', async ($, on) => {
+  const written: unknown[] = []
+  stub(on, {
+    'session.id': () => ({ value: undefined }),
+    'turn.complete': () => ({ text: 'ok' }),
+    'store.set': (_: unknown, e: { key: string; value: unknown }) => {
+      if (e.key === 'cost-days') written.push(e.value)
+      return { value: undefined }
+    },
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.turn.complete({ reason: 'answer', durationMs: 1000, answer: 'ok', usage: { output_tokens: 1 } } as never)
+  await settle()
+
+  expect(JSON.stringify(written).includes('undefined')).toBe(false)
+  expect(written.length).toBe(0)
+})
