@@ -1,0 +1,84 @@
+{
+  "name": "claudeck",
+  "version": "1.0.0",
+  "description": "Live dashboard panel with version control, a file explorer with icons, work in progress, tasks, agents, MCP, tests, pace and limit projection, cost history and alerts.",
+  "author": {
+    "name": "Yeider Catari",
+    "url": "https://github.com/nvbezz"
+  },
+  "homepage": "https://github.com/nvbezz/claudeck",
+  "repository": "https://github.com/nvbezz/claudeck",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "dashboard",
+    "panel",
+    "status",
+    "agents",
+    "git",
+    "file-explorer"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "width": {
+      "type": "number",
+      "title": "Panel width",
+      "description": "Columns the docked panel asks for.",
+      "default": 46
+    },
+    "ctxWarn": {
+      "type": "number",
+      "title": "Context warning %",
+      "description": "Context bars turn yellow from this percentage.",
+      "default": 60
+    },
+    "ctxCrit": {
+      "type": "number",
+      "title": "Context critical %",
+      "description": "Context bars turn red and an alert fires from this percentage.",
+      "default": 85
+    },
+    "limitWarn": {
+      "type": "number",
+      "title": "Limit alert %",
+      "description": "Alert when the 5-hour limit reaches this percentage.",
+      "default": 80
+    },
+    "isSound": {
+      "type": "boolean",
+      "title": "Sounds",
+      "description": "Play a sound with each alert.",
+      "default": true
+    },
+    "isDesktop": {
+      "type": "boolean",
+      "title": "Desktop notifications",
+      "description": "Send a desktop notification with each alert.",
+      "default": true
+    },
+    "notifyMinSeconds": {
+      "type": "number",
+      "title": "Notify turns longer than (s)",
+      "description": "Only alert when a turn ended after at least this many seconds.",
+      "default": 30
+    },
+    "mcpSeconds": {
+      "type": "number",
+      "title": "MCP check every (s)",
+      "description": "How often the MCP server list is refreshed.",
+      "default": 180
+    },
+    "isIcons": {
+      "type": "boolean",
+      "title": "Nerd Font icons",
+      "description": "Use Nerd Font icons (Ghostty includes them). Turn off for plain unicode symbols.",
+      "default": true
+    },
+    "bgColor": {
+      "type": "string",
+      "title": "Panel background",
+      "description": "Hex color painted behind the panels, to match the terminal theme (Catppuccin Mocha base is #1e1e2e).",
+      "default": "#1e1e2e"
+    }
+  }
+}
