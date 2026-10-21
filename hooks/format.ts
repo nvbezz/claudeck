@@ -1,7 +1,24 @@
 import type { Config } from './config'
-import type { Sample } from '../types'
+import type { Change, FileStat, Sample } from '../types'
 
 const BLOCKS = '▁▂▃▄▅▆▇█'
+
+// What the "archivos modificados" card lists: the edits the session tracked, plus whatever git reports as changed
+// (so files touched through Bash show up too). A file git reports as deleted is not listed.
+export const modifiedFiles = (
+  tracked: Record<string, FileStat>,
+  changes: Change[],
+  gitRoot: string,
+): [string, FileStat][] => {
+  const all = new Map(Object.entries(tracked))
+  for (const one of changes) {
+    if (one.code === 'D' || gitRoot === '') continue
+    const path = `${gitRoot}/${one.path.replace(/\/$/, '')}`
+    if (!all.has(path)) all.set(path, { added: one.added, removed: one.removed })
+  }
+
+  return [...all]
+}
 
 export const base = (path: string): string => path.split('/').pop() ?? path
 

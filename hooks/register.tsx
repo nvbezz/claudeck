@@ -5,7 +5,7 @@ import { ping } from './alerts'
 import { readConfig } from './config'
 import { noteActivity, syncAgents } from './agents'
 import { loadEffort } from './controls'
-import { FILES, PANE, healPanes, openFiles, openPane, refresh, refreshGit, refreshMcp, refreshSkills } from './data'
+import { FILES, PANE, healPanes, openFiles, openPane, pruneFiles, refresh, refreshGit, refreshMcp, refreshSkills } from './data'
 import { initExplorer, refreshExplorer, setQuery, wheel } from './explorer'
 import { renderFiles } from './filesView'
 import { base, clip, duration, lineDiff, money, spark } from './format'
@@ -49,7 +49,7 @@ async function syncDisk($: Dollar): Promise<void> {
   }
   sync.isRunning = true
   try {
-    await Promise.all([refreshGit($), refreshExplorer($)])
+    await Promise.all([refreshGit($), refreshExplorer($), pruneFiles($)])
   } catch {
     // The next poll retries.
   } finally {

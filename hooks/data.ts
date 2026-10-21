@@ -126,6 +126,19 @@ const gitCode = (xy: string): string => {
   return 'M'
 }
 
+// Drops the tracked edits of files that no longer exist on disk, so a deleted file leaves the "archivos modificados" card.
+export async function pruneFiles($: Dollar): Promise<void> {
+  const known = Object.keys((await read($, panel)).files)
+  if (known.length === 0) return
+  const out = await $.process
+    .run(['sh', '-c', 'for f in "$@"; do [ -e "$f" ] || printf "%s\\0" "$f"; done', 'sh', ...known], { timeoutMs: 5000 })
+    .catch(() => undefined)
+  if (out === undefined || out.exitCode !== 0) return
+  const gone = new Set(out.stdout.split('\0').filter(one => one !== ''))
+  if (gone.size === 0) return
+  await update($, panel, p => ({ ...p, files: Object.fromEntries(Object.entries(p.files).filter(([path]) => !gone.has(path))) }))
+}
+
 // Only the newest refresh may write: a slower, older one finishing last would put stale data back.
 let gitRun = 0
 

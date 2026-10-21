@@ -11,6 +11,7 @@ import {
   fitCommit,
   isFiveHour,
   level,
+  modifiedFiles,
   money,
   prettyModel,
   project,
@@ -110,7 +111,7 @@ export async function renderPanel($: Dollar, e: RenderInputOf<'Pane', RenderSurf
   const barWidth = Math.max(6, Math.min(10, inner - 26))
   const isOpen = (s: Section) => !p.collapsed.includes(s)
   const toggle = (s: Section) => () => void toggleSection($, s)
-  const files = Object.entries(p.files)
+  const files = modifiedFiles(p.files, p.changes, p.gitRoot)
   const added = files.reduce((n, [, f]) => n + f.added, 0)
   const removed = files.reduce((n, [, f]) => n + f.removed, 0)
   const doneTodos = p.todos.filter(t => t.status === 'completed').length

@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { readConfig } from './config'
 import { EFFORTS } from './controls'
-import { clip, duration, effortView, fitCommit, lineDiff, prettyModel, project, spark, until } from './format'
+import { clip, duration, effortView, fitCommit, lineDiff, modifiedFiles, prettyModel, project, spark, until } from './format'
 import { dayKey, series, spentPerDay } from './history'
 import { isSafeId } from './housekeeping'
 import { notifyCommand, openCommand, parseOs, soundCommand } from './platform'
@@ -268,4 +268,18 @@ test('isGone flags only what a loaded listing no longer has', () => {
   expect(isGone(listing, '/p/b.txt')).toBe(true)
   expect(isGone(listing, '/p/sub/c.txt')).toBe(false)
   expect(isGone(listing, '')).toBe(false)
+})
+
+test('modifiedFiles adds git changes to tracked edits and leaves deleted files out', () => {
+  const tracked = { '/p/a.js': { added: 3, removed: 1 } }
+  const changes = [
+    { path: 'a.js', code: 'M', added: 9, removed: 9 },
+    { path: 'b.css', code: 'U', added: 0, removed: 0 },
+    { path: 'gone.md', code: 'D', added: 0, removed: 4 },
+  ]
+  expect(modifiedFiles(tracked, changes, '/p')).toEqual([
+    ['/p/a.js', { added: 3, removed: 1 }],
+    ['/p/b.css', { added: 0, removed: 0 }],
+  ])
+  expect(modifiedFiles(tracked, changes, '')).toEqual([['/p/a.js', { added: 3, removed: 1 }]])
 })
