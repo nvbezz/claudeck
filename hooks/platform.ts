@@ -16,7 +16,9 @@ export const parseOs = (uname: string): Os => {
 export async function detectOs($: Dollar): Promise<Os> {
   if (cached !== undefined) return cached
   const out = await $.process.run(['uname', '-s'], { timeoutMs: 3000 }).catch(() => undefined)
-  cached = out === undefined || out.exitCode !== 0 ? 'other' : parseOs(out.stdout)
+  // A failed `uname` is not cached: the next alert asks again instead of staying silent for the whole session.
+  if (out === undefined || out.exitCode !== 0) return 'other'
+  cached = parseOs(out.stdout)
 
   return cached
 }

@@ -6,7 +6,7 @@ import { clip, duration, effortView, fitCommit, lineDiff, modifiedFiles, prettyM
 import { dayKey, series, spentPerDay } from './history'
 import { isSafeId } from './housekeeping'
 import { notifyCommand, openCommand, parseOs, soundCommand } from './platform'
-import { FILES, MAX_HEAL_TRIES, PANE, healPanes, parseStatus } from './data'
+import { FILES, MAX_HEAL_TRIES, PANE, SLOW_HEAL_EVERY, healPanes, parseStatus } from './data'
 import { INITIAL } from './state'
 import { keepAgent } from './agents'
 import { isAllDone, settleTodos } from './tasks'
@@ -238,15 +238,18 @@ test('healPanes respects a pane the person closed', async () => {
   expect(both.opened).toEqual([])
 })
 
-test('healPanes survives a failing listing and stops after too many tries', async () => {
+test('healPanes survives a failing listing and slows down after too many tries', async () => {
   const broken = fakeUi('fail')
   expect(await healPanes(broken.$, cfgOf, new Set(), { tries: 0 })).toEqual([])
   expect(broken.opened).toEqual([])
   const stuck = fakeUi([])
   const state = { tries: 0 }
   for (let i = 0; i < MAX_HEAL_TRIES + 5; i++) await healPanes(stuck.$, cfgOf, new Set(), state)
-  expect(stuck.opened.length).toBe(MAX_HEAL_TRIES * 2)
-  expect(state.tries).toBe(MAX_HEAL_TRIES)
+  // 20 fast tries, then one slow retry on the first call past the limit; the other four wait.
+  expect(stuck.opened.length).toBe((MAX_HEAL_TRIES + 1) * 2)
+  expect(state.tries).toBe(MAX_HEAL_TRIES + 5)
+  for (let i = 0; i < SLOW_HEAL_EVERY; i++) await healPanes(stuck.$, cfgOf, new Set(), state)
+  expect(stuck.opened.length).toBe((MAX_HEAL_TRIES + 2) * 2)
 })
 
 test('parseStatus reads NUL-separated entries, keeps odd names whole and skips a rename\'s old path', () => {

@@ -43,16 +43,16 @@ export const lineDiff = (before: string, after: string): { added: number; remove
 }
 
 export const duration = (ms: number): string => {
-  const s = Math.max(0, Math.floor(ms / 1000))
+  const s = Number.isFinite(ms) ? Math.max(0, Math.floor(ms / 1000)) : 0
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s % 60}s` : `${s}s`
 }
 
 export const compact = (n: number): string =>
-  n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : `${n}`
+  !Number.isFinite(n) ? '0' : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : `${n}`
 
-export const money = (usd: number): string => `$${usd.toFixed(2)}`
+export const money = (usd: number): string => `$${(Number.isFinite(usd) ? usd : 0).toFixed(2)}`
 
 export const shortPath = (path: string): string => {
   const tail = path.split('/').filter(Boolean).pop()

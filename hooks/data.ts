@@ -24,10 +24,12 @@ const titleOf = (cfg: Config, id: string): string =>
   id === FILES ? (cfg.isIcons ? '\u{f0645} Archivos' : 'Archivos') : cfg.isIcons ? '\u{f056e} Panel' : 'Panel'
 
 export const MAX_HEAL_TRIES = 20
+export const SLOW_HEAL_EVERY = 10
 
 // The engine can leave a pane undrawn (a window or tab switch, a detached surface) and does not always bring it back.
-// Reopen what is missing or unplaced, except what the person closed by hand; give up after a run of failed tries,
-// so a pane that cannot be drawn does not loop forever. Returns the ids it tried to reopen.
+// Reopen what is missing or unplaced, except what the person closed by hand. After a run of failed tries it slows down
+// (one try per SLOW_HEAL_EVERY calls) instead of stopping, so a pane displaced for a while still comes back.
+// Returns the ids it tried to reopen.
 export async function healPanes($: Dollar, cfg: Config, closed: ReadonlySet<string>, state: { tries: number }): Promise<string[]> {
   const wanted = [FILES, PANE].filter(id => !closed.has(id))
   if (wanted.length === 0) return []
@@ -38,8 +40,9 @@ export async function healPanes($: Dollar, cfg: Config, closed: ReadonlySet<stri
     state.tries = 0
     return []
   }
-  if (state.tries >= MAX_HEAL_TRIES) return []
+  const isSlow = state.tries >= MAX_HEAL_TRIES
   state.tries++
+  if (isSlow && (state.tries - MAX_HEAL_TRIES) % SLOW_HEAL_EVERY !== 1) return []
   const columns = await width($, cfg)
   for (const id of missing) await $.ui.open({ id, title: titleOf(cfg, id), columns }).catch(() => undefined)
 
@@ -131,7 +134,7 @@ export async function pruneFiles($: Dollar): Promise<void> {
   const known = Object.keys((await read($, panel)).files)
   if (known.length === 0) return
   const out = await $.process
-    .run(['sh', '-c', 'for f in "$@"; do [ -e "$f" ] || printf "%s\\0" "$f"; done', 'sh', ...known], { timeoutMs: 5000 })
+    .run(['sh', '-c', 'for f in "$@"; do [ -e "$f" ] || printf "%s\\0" "$f"; done', 'sh', ...known.slice(-200)], { timeoutMs: 5000 })
     .catch(() => undefined)
   if (out === undefined || out.exitCode !== 0) return
   const gone = new Set(out.stdout.split('\0').filter(one => one !== ''))
@@ -177,7 +180,7 @@ export async function refreshGit($: Dollar): Promise<void> {
     git(['log', '-n', '8', '--pretty=format:%h%x1f%s%x1f%ct%x1f%an']),
     git(['rev-list', '--left-right', '--count', '@{u}...HEAD']),
     git(['rev-parse', '--abbrev-ref', '@{u}']),
-    git(['diff', 'HEAD', '--numstat']),
+    git(['-c', 'core.quotepath=false', 'diff', 'HEAD', '--numstat']),
   ])
   // Without a status there is no truthful change list: keep the previous one.
   if (top === undefined || status === undefined || status.exitCode !== 0) return
@@ -224,8 +227,9 @@ export async function refreshGit($: Dollar): Promise<void> {
 }
 
 export async function refreshMcp($: Dollar, cfg: Config): Promise<void> {
-  const out = await $.process.run(['claude', 'mcp', 'list'], { cwd: await $.session.cwd(), timeoutMs: 30000 })
-  if (out.exitCode !== 0) return
+  const out = await $.process.run(['claude', 'mcp', 'list'], { cwd: await $.session.cwd(), timeoutMs: 30000 }).catch(() => undefined)
+  // A timeout says nothing about the servers: keep the list the panel already shows.
+  if (out === undefined || out.exitCode !== 0) return
   const mcp = out.stdout
     .split('\n')
     .filter(line => /Connected|Failed|authentication/i.test(line) && line.includes(': '))

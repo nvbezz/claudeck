@@ -12,6 +12,7 @@ export type Row = { path: string; name: string; depth: number; kind: Entry['kind
 
 const IGNORED = new Set(['node_modules', '.git', '__pycache__', '.next', 'dist', 'build', 'target', '.venv', '.cache'])
 const MAX_ROWS = 400
+export const MAX_PREVIEW_BYTES = 1_000_000
 // Rows the Archivos tab's fixed parts take: header (6 + margin), selection (2), tree frame (2), footer (1).
 export const TREE_FIXED_ROWS = 12
 export const treeHeight = (bodyRows: number): number => Math.max(6, bodyRows - TREE_FIXED_ROWS)
@@ -135,6 +136,16 @@ export async function openFile($: Dollar, path: string): Promise<void> {
 }
 
 export async function previewFile($: Dollar, path: string): Promise<void> {
+  // Reading a video or an archive whole would stall the panel: cap what is previewed.
+  const info = await $.fs.stat(path).catch(() => undefined)
+  if (info === undefined || info.kind !== 'file') {
+    $.ui.toast('no se puede previsualizar este archivo')
+    return
+  }
+  if (info.size > MAX_PREVIEW_BYTES) {
+    $.ui.toast('archivo demasiado grande para previsualizar')
+    return
+  }
   const text = await $.fs.read(path).catch(() => undefined)
   if (typeof text !== 'string' || text.includes('\u0000')) {
     $.ui.toast('no se puede previsualizar este archivo')

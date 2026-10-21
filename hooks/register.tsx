@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderInputOf, RenderSurface } from 'claude-code'
 
 import { ping } from './alerts'
+import { fire, sid } from './safe'
 import { readConfig } from './config'
 import { noteActivity, syncAgents } from './agents'
 import { loadEffort } from './controls'
@@ -61,6 +62,24 @@ async function syncDisk($: Dollar): Promise<void> {
   }
 }
 
+// A drawing that throws makes the engine draw its own pane in the panel's place: keep the pane, say what failed.
+async function safeRender<T>($: Dollar, e: RenderInputOf<'Pane', RenderSurface>, title: string, draw: () => Promise<T>): Promise<T> {
+  try {
+    return await draw()
+  } catch (error) {
+    const { Box, Text } = $.ui.resolve(e)
+    const reason = String(error instanceof Error ? error.message : error).slice(0, 200)
+    $.ui.log(`claudeck: ${title} could not be drawn: ${reason}`)
+
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Text color="warning">{title}: no se pudo dibujar</Text>
+        <Text dimColor wrap="wrap">{reason}</Text>
+      </Box>
+    ) as unknown as T
+  }
+}
+
 export const register: Register = (on, options) => {
   const cfg = readConfig(options)
   // Panes the person closed by hand: they stay closed until asked for again.
@@ -84,20 +103,20 @@ export const register: Register = (on, options) => {
 
     closed.clear()
     heal.tries = 0
-    mark($, await $.session.id(), 'clear')
-    void pruneStale($)
+    mark($, await sid($), 'clear')
+    fire(() => pruneStale($))
     void initExplorer($)
       .then(() => openPane($, cfg))
       .then(opened => {
         if (!opened.isPlaced) $.ui.toast('claudeck: la terminal es muy estrecha para el panel; ensánchala o escribe /panel')
       })
       .catch(() => {})
-    void loadHistory($)
-    void refresh($, cfg)
-    void refreshGit($)
-    void refreshMcp($, cfg)
-    void refreshSkills($)
-    void loadEffort($)
+    fire(() => loadHistory($))
+    fire(() => refresh($, cfg))
+    fire(() => refreshGit($))
+    fire(() => refreshMcp($, cfg))
+    fire(() => refreshSkills($))
+    fire(() => loadEffort($))
     // Polling slows down while nothing runs: a redraw or a git/ls process per tick is wasted on an idle session.
     const isBusy = async (): Promise<boolean> => {
       const p = await read($, panel).catch(() => undefined)
@@ -124,11 +143,11 @@ export const register: Register = (on, options) => {
       }),
     )
     poll('git', 5000, 20000, () => refreshGit($))
-    $.clock.every(3000, () => void syncAgents($, cfg.agentHideSeconds * 1000))
+    $.clock.every(3000, () => fire(() => syncAgents($, cfg.agentHideSeconds * 1000)))
     $.clock.every(3000, () => void healPanes($, cfg, closed, heal).catch(() => {}))
     poll('explorer', 8000, 30000, () => refreshExplorer($))
-    $.clock.every(cfg.mcpSeconds * 1000, () => void refreshMcp($, cfg))
-    $.clock.every(cfg.mcpSeconds * 3000, () => void refreshSkills($))
+    $.clock.every(cfg.mcpSeconds * 1000, () => fire(() => refreshMcp($, cfg)))
+    $.clock.every(cfg.mcpSeconds * 3000, () => fire(() => refreshSkills($)))
 
     return next(e)
   })
@@ -142,7 +161,7 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'panel' }, async $ => {
     closed.clear()
     heal.tries = 0
-    const opened = await openPane($, cfg)
+    const opened = await openPane($, cfg).catch(() => ({ isPlaced: false, reason: 'the engine refused to open it' }))
 
     return {
       text: opened.isPlaced
@@ -167,8 +186,9 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'panel-ancho' }, async ($, e) => {
     const n = Number(e.args.trim())
+    // Plain digits only: Number() would also take 0x30, 1e2 or Infinity.
     if (e.args.trim() === '') await $.store.set('width', null)
-    else if (!Number.isInteger(n) || n < 30 || n > 120) return { text: 'Usage: /panel-ancho <30-120>' }
+    else if (!/^\d{2,3}$/.test(e.args.trim()) || n < 30 || n > 120) return { text: 'Usage: /panel-ancho <30-120>' }
     else await $.store.set('width', n)
     await openPane($, cfg)
 
@@ -184,22 +204,22 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
-    await removeOwn($, await $.session.id().catch(() => ''))
+    await removeOwn($, await sid($))
 
     return next(e)
   })
 
   on('session.measure', async ($, e, next) => {
-    void refresh($, cfg)
+    fire(() => refresh($, cfg))
 
     return next(e)
   })
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
-      void refresh($, cfg)
-      await update($, panel, p => ({ ...p, turnStartCost: p.costUsd ?? 0 }))
-      mark($, await $.session.id(), 'start')
+      fire(() => refresh($, cfg))
+      await update($, panel, p => ({ ...p, turnStartCost: p.costUsd ?? 0 })).catch(() => {})
+      mark($, await sid($), 'start')
     }
 
     return next(e)
@@ -207,17 +227,22 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
-      mark($, await $.session.id(), 'done')
-      const out = e.usage?.output_tokens ?? 0
-      await update($, panel, p => ({ ...p, tokensOut: p.tokensOut + out }))
-      await refresh($, cfg)
-      void syncDisk($)
-      const p = await read($, panel)
-      const spent = (p.costUsd ?? 0) - p.turnStartCost
-      if (spent > 0) await update($, panel, q => ({ ...q, turnCosts: [...q.turnCosts, spent].slice(-20) }))
-      void recordCost($, p.costUsd, p.sessionId)
-      if (e.reason === 'answer' && e.durationMs >= cfg.notifyMinSeconds * 1000) {
-        void ping($, cfg, 'done', 'Claude terminó', duration(e.durationMs))
+      mark($, await sid($), 'done')
+      // The turn is over whatever happens to the panel's own bookkeeping: none of it may stop next(e).
+      try {
+        const out = e.usage?.output_tokens ?? 0
+        await update($, panel, p => ({ ...p, tokensOut: p.tokensOut + out }))
+        await refresh($, cfg)
+        void syncDisk($)
+        const p = await read($, panel)
+        const spent = (p.costUsd ?? 0) - p.turnStartCost
+        if (spent > 0) await update($, panel, q => ({ ...q, turnCosts: [...q.turnCosts, spent].slice(-20) }))
+        fire(() => recordCost($, p.costUsd, p.sessionId))
+        if (e.reason === 'answer' && e.durationMs >= cfg.notifyMinSeconds * 1000) {
+          fire(() => ping($, cfg, 'done', 'Claude terminó', duration(e.durationMs)))
+        }
+      } catch {
+        // The next turn or poll catches the panel up.
       }
     }
 
@@ -235,7 +260,7 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     const input = e as unknown as Record<string, unknown>
-    if (e.agentId === undefined) mark($, await $.session.id(), 'tick')
+    if (e.agentId === undefined) mark($, await sid($), 'tick')
     // The turn's real effort (what the status line shows), so a /effort typed in the prompt shows here too.
     const turnEffort = (e as { effort?: { level?: string } }).effort?.level
     if (e.agentId === undefined && typeof turnEffort === 'string' && turnEffort !== '') {
@@ -251,7 +276,7 @@ export const register: Register = (on, options) => {
     const run = { id: e.tool_use_id, label, since: Date.now() }
     if (e.agentId !== undefined) {
       noteActivity(e.agentId, label)
-      void syncAgents($, cfg.agentHideSeconds * 1000)
+      fire(() => syncAgents($, cfg.agentHideSeconds * 1000))
     }
     await update($, panel, p => ({
       ...p,
@@ -260,7 +285,7 @@ export const register: Register = (on, options) => {
     })).catch(() => {})
 
     if (e.tool === 'TodoWrite') {
-      const todos = (input.todos as Panel['todos'] | undefined) ?? []
+      const todos = Array.isArray(input.todos) ? (input.todos as Panel['todos']) : []
       await update($, panel, p => ({
         ...p,
         todos: todos.map(t => ({ content: t.content, status: t.status })),
@@ -331,11 +356,11 @@ export const register: Register = (on, options) => {
     try {
       return await next(e)
     } finally {
-      void syncAgents($, cfg.agentHideSeconds * 1000)
+      fire(() => syncAgents($, cfg.agentHideSeconds * 1000))
     }
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => renderPanel($, e, cfg))
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => safeRender($, e, 'Panel', () => renderPanel($, e, cfg)))
 
   on('ui.scroll', { component: 'Pane', requestId: FILES }, async ($, e) => {
     await wheel($, e.by, e.bodyRows)
@@ -343,5 +368,5 @@ export const register: Register = (on, options) => {
     return {}
   })
 
-  on('ui.render', { component: 'Pane', requestId: FILES }, async ($, e) => renderFiles($, e, cfg))
+  on('ui.render', { component: 'Pane', requestId: FILES }, async ($, e) => safeRender($, e, 'Archivos', () => renderFiles($, e, cfg)))
 }
