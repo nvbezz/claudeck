@@ -6,11 +6,11 @@ import { clip, duration, effortView, fitCommit, lineDiff, prettyModel, project, 
 import { dayKey, series, spentPerDay } from './history'
 import { isSafeId } from './housekeeping'
 import { notifyCommand, openCommand, parseOs, soundCommand } from './platform'
-import { FILES, MAX_HEAL_TRIES, PANE, healPanes } from './data'
+import { FILES, MAX_HEAL_TRIES, PANE, healPanes, parseStatus } from './data'
 import { INITIAL } from './state'
 import { keepAgent } from './agents'
 import { isAllDone, settleTodos } from './tasks'
-import { visibleRows } from './explorer'
+import { isGone, visibleRows } from './explorer'
 import { parseCollapsed } from './ui'
 
 test('effortView lights the dots up to the active level', () => {
@@ -247,4 +247,25 @@ test('healPanes survives a failing listing and stops after too many tries', asyn
   for (let i = 0; i < MAX_HEAL_TRIES + 5; i++) await healPanes(stuck.$, cfgOf, new Set(), state)
   expect(stuck.opened.length).toBe(MAX_HEAL_TRIES * 2)
   expect(state.tries).toBe(MAX_HEAL_TRIES)
+})
+
+test('parseStatus reads NUL-separated entries, keeps odd names whole and skips a rename\'s old path', () => {
+  expect(parseStatus('')).toEqual([])
+  expect(parseStatus(' M a.txt\0?? with space/ñ.js\0D  gone.md\0')).toEqual([
+    { xy: ' M', path: 'a.txt' },
+    { xy: '??', path: 'with space/ñ.js' },
+    { xy: 'D ', path: 'gone.md' },
+  ])
+  expect(parseStatus('R  new.txt\0old.txt\0 M b.txt\0')).toEqual([
+    { xy: 'R ', path: 'new.txt' },
+    { xy: ' M', path: 'b.txt' },
+  ])
+})
+
+test('isGone flags only what a loaded listing no longer has', () => {
+  const listing = { '/p': [{ name: 'a.txt', kind: 'file' as const }] }
+  expect(isGone(listing, '/p/a.txt')).toBe(false)
+  expect(isGone(listing, '/p/b.txt')).toBe(true)
+  expect(isGone(listing, '/p/sub/c.txt')).toBe(false)
+  expect(isGone(listing, '')).toBe(false)
 })

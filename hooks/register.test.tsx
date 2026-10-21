@@ -127,10 +127,10 @@ test('a repository without commits still shows its branch', async ($, on) => {
     'session.cwd': () => ({ value: '/p' }),
     'process.run': (_: unknown, e: { argv: string[] }) => {
       const cmd = e.argv.join(' ')
-      if (cmd.startsWith('git rev-parse --abbrev-ref HEAD')) return { value: { exitCode: 128, stdout: '', stderr: 'unknown revision' } }
-      if (cmd.startsWith('git symbolic-ref')) return { value: { exitCode: 0, stdout: 'main\n', stderr: '' } }
-      if (cmd.startsWith('git rev-parse --show-toplevel')) return { value: { exitCode: 0, stdout: '/p\n', stderr: '' } }
-      if (cmd.startsWith('git status')) return { value: { exitCode: 0, stdout: '?? a.txt\n', stderr: '' } }
+      if (cmd.startsWith('git --no-optional-locks rev-parse --abbrev-ref HEAD')) return { value: { exitCode: 128, stdout: '', stderr: 'unknown revision' } }
+      if (cmd.startsWith('git --no-optional-locks symbolic-ref')) return { value: { exitCode: 0, stdout: 'main\n', stderr: '' } }
+      if (cmd.startsWith('git --no-optional-locks rev-parse --show-toplevel')) return { value: { exitCode: 0, stdout: '/p\n', stderr: '' } }
+      if (cmd.startsWith('git --no-optional-locks status')) return { value: { exitCode: 0, stdout: '?? a.txt\0', stderr: '' } }
       return { value: { exitCode: 1, stdout: '', stderr: '' } }
     },
   })
@@ -167,9 +167,9 @@ test('a commit with a long subject still shows its age', async ($, on) => {
     'session.cwd': () => ({ value: '/p' }),
     'process.run': (_: unknown, e: { argv: string[] }) => {
       const cmd = e.argv.join(' ')
-      if (cmd.startsWith('git rev-parse --abbrev-ref HEAD')) return { value: { exitCode: 0, stdout: 'main\n', stderr: '' } }
-      if (cmd.startsWith('git rev-parse --show-toplevel')) return { value: { exitCode: 0, stdout: '/p\n', stderr: '' } }
-      if (cmd.startsWith('git log')) return { value: { exitCode: 0, stdout: `abc1234\x1f${subject}\x1f${Math.floor(Date.now() / 1000)}\x1fme`, stderr: '' } }
+      if (cmd.startsWith('git --no-optional-locks rev-parse --abbrev-ref HEAD')) return { value: { exitCode: 0, stdout: 'main\n', stderr: '' } }
+      if (cmd.startsWith('git --no-optional-locks rev-parse --show-toplevel')) return { value: { exitCode: 0, stdout: '/p\n', stderr: '' } }
+      if (cmd.startsWith('git --no-optional-locks log')) return { value: { exitCode: 0, stdout: `abc1234\x1f${subject}\x1f${Math.floor(Date.now() / 1000)}\x1fme`, stderr: '' } }
       return { value: { exitCode: 0, stdout: '', stderr: '' } }
     },
   })

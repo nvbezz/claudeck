@@ -36,6 +36,31 @@ function mark($: Dollar, sessionId: string, kind: keyof typeof MARKS): void {
 const TEST_RE =
   /(?:^|&&|;|\|\|)\s*((?:npm|pnpm|yarn)(?: run)? (?:test|build|lint)|npx (?:tsc|vitest|jest)|tsc|pytest|vitest|jest|cargo (?:test|build|check)|go (?:test|build)|make)\b/
 
+// Tools that can change files or git state: the explorer and the git card catch up right after them.
+const CHANGES_DISK = new Set(['Bash', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
+
+// One sync at a time; calls arriving meanwhile collapse into a single rerun, so the last change is never missed.
+const sync = { isRunning: false, isQueued: false }
+
+async function syncDisk($: Dollar): Promise<void> {
+  if (sync.isRunning) {
+    sync.isQueued = true
+    return
+  }
+  sync.isRunning = true
+  try {
+    await Promise.all([refreshGit($), refreshExplorer($)])
+  } catch {
+    // The next poll retries.
+  } finally {
+    sync.isRunning = false
+    if (sync.isQueued) {
+      sync.isQueued = false
+      void syncDisk($)
+    }
+  }
+}
+
 export const register: Register = (on, options) => {
   const cfg = readConfig(options)
   // Panes the person closed by hand: they stay closed until asked for again.
@@ -186,7 +211,7 @@ export const register: Register = (on, options) => {
       const out = e.usage?.output_tokens ?? 0
       await update($, panel, p => ({ ...p, tokensOut: p.tokensOut + out }))
       await refresh($, cfg)
-      void refreshGit($)
+      void syncDisk($)
       const p = await read($, panel)
       const spent = (p.costUsd ?? 0) - p.turnStartCost
       if (spent > 0) await update($, panel, q => ({ ...q, turnCosts: [...q.turnCosts, spent].slice(-20) }))
@@ -262,6 +287,7 @@ export const register: Register = (on, options) => {
       const checked = e.tool === 'Bash' ? TEST_RE.exec(String(input.command ?? '')) : null
       const result = (isOk ? ran?.result : undefined) as { task?: { id?: string; subject?: string } } | undefined
 
+      if (CHANGES_DISK.has(e.tool)) void syncDisk($)
       await update($, panel, p => ({
         ...p,
         running: p.running.filter(one => one.id !== run.id),

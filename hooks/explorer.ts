@@ -23,19 +23,31 @@ const parent = (path: string): string => {
   return cut <= 0 ? '/' : path.slice(0, cut)
 }
 
-async function listDir($: Dollar, dir: string): Promise<Entry[]> {
-  const raw = await $.fs.list(dir).catch(() => [])
+// undefined when the folder cannot be listed (deleted, moved), so callers can tell it apart from an empty one.
+async function listDir($: Dollar, dir: string): Promise<Entry[] | undefined> {
+  const raw = await $.fs.list(dir).catch(() => undefined)
+  if (raw === undefined) return undefined
   return raw
     .map(one => ({ name: one.name, kind: one.kind }))
     .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1))
 }
 
-export async function loadDir($: Dollar, dir: string): Promise<void> {
+export async function loadDir($: Dollar, dir: string): Promise<boolean> {
   const entries = await listDir($, dir)
   await update($, panel, p => ({
     ...p,
-    explorer: { ...p.explorer, listing: { ...p.explorer.listing, [dir]: entries } },
+    explorer: { ...p.explorer, listing: { ...p.explorer.listing, [dir]: entries ?? [] } },
   }))
+
+  return entries !== undefined
+}
+
+// True when the folder holding `path` is listed and no longer has it: the file or folder was deleted.
+export const isGone = (listing: Record<string, Entry[]>, path: string): boolean => {
+  if (path === '') return false
+  const dir = parent(path)
+  const entries = listing[dir]
+  return entries !== undefined && !entries.some(one => join(dir, one.name) === path)
 }
 
 export async function setRoot($: Dollar, root: string): Promise<void> {
@@ -51,7 +63,30 @@ export async function initExplorer($: Dollar): Promise<void> {
 export async function refreshExplorer($: Dollar): Promise<void> {
   const ex = (await read($, panel)).explorer
   if (ex.root === '') return
-  for (const dir of [ex.root, ...ex.open]) await loadDir($, dir)
+  await loadDir($, ex.root)
+  const missing: string[] = []
+  for (const dir of ex.open) if (!(await loadDir($, dir))) missing.push(dir)
+  // Forget what no longer exists: folders deleted from disk, their cached listings, and a selection or preview
+  // pointing at a deleted file, so the panel never keeps showing something that is gone.
+  await update($, panel, p => {
+    const open = p.explorer.open.filter(dir => !missing.some(gone => dir === gone || dir.startsWith(`${gone}/`)))
+    const keep = new Set([p.explorer.root, ...open])
+    const listing = Object.fromEntries(Object.entries(p.explorer.listing).filter(([dir]) => keep.has(dir)))
+    const { selected, preview } = p.explorer
+    const isSelectedGone = isGone(listing, selected)
+    const isPreviewGone = preview !== undefined && isGone(listing, preview.path)
+
+    return {
+      ...p,
+      explorer: {
+        ...p.explorer,
+        open,
+        listing,
+        selected: isSelectedGone ? '' : selected,
+        preview: isPreviewGone || isSelectedGone ? undefined : preview,
+      },
+    }
+  })
 }
 
 export async function toggleDir($: Dollar, dir: string): Promise<void> {

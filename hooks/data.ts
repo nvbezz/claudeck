@@ -126,49 +126,73 @@ const gitCode = (xy: string): string => {
   return 'M'
 }
 
+// Only the newest refresh may write: a slower, older one finishing last would put stale data back.
+let gitRun = 0
+
+// `git status -z` entries: "XY path", NUL-terminated, never quoted; a rename or copy is followed by its old path.
+export function parseStatus(raw: string): { xy: string; path: string }[] {
+  const out: { xy: string; path: string }[] = []
+  const parts = raw.split('\0')
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i] ?? ''
+    if (part.length < 4) continue
+    const xy = part.slice(0, 2)
+    out.push({ xy, path: part.slice(3) })
+    if (xy[0] === 'R' || xy[0] === 'C') i++
+  }
+  return out
+}
+
 export async function refreshGit($: Dollar): Promise<void> {
+  const mine = ++gitRun
   const cwd = await $.session.cwd()
-  let head = await $.process.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], { cwd, timeoutMs: 3000 })
+  // A timeout or spawn failure yields undefined; --no-optional-locks keeps polling from fighting the person's own git commands.
+  const git = (args: string[]) =>
+    $.process.run(['git', '--no-optional-locks', ...args], { cwd, timeoutMs: 8000 }).catch(() => undefined)
+  let head = await git(['rev-parse', '--abbrev-ref', 'HEAD'])
   // A repository with no commits yet has no HEAD to resolve, but it still has a branch name.
-  if (head.exitCode !== 0) head = await $.process.run(['git', 'symbolic-ref', '--short', '-q', 'HEAD'], { cwd, timeoutMs: 3000 })
+  if (head !== undefined && head.exitCode !== 0) head = await git(['symbolic-ref', '--short', '-q', 'HEAD'])
+  // Could not ask git at all (timeout): keep what the panel shows instead of blanking or throwing.
+  if (head === undefined) return
   if (head.exitCode !== 0) {
-    await update($, panel, p => ({ ...p, ...NO_GIT }))
+    if (mine === gitRun) await update($, panel, p => ({ ...p, ...NO_GIT }))
     return
   }
-  const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd, timeoutMs: 3000 })
-  const status = await $.process.run(['git', 'status', '--porcelain'], { cwd, timeoutMs: 3000 })
-  const [log, counts, upstream, numstat] = await Promise.all([
-    $.process.run(['git', 'log', '-n', '8', '--pretty=format:%h%x1f%s%x1f%ct%x1f%an'], { cwd, timeoutMs: 3000 }),
-    $.process.run(['git', 'rev-list', '--left-right', '--count', '@{u}...HEAD'], { cwd, timeoutMs: 3000 }),
-    $.process.run(['git', 'rev-parse', '--abbrev-ref', '@{u}'], { cwd, timeoutMs: 3000 }),
-    $.process.run(['git', 'diff', 'HEAD', '--numstat'], { cwd, timeoutMs: 3000 }),
+  const [top, status, log, counts, upstream, numstat] = await Promise.all([
+    git(['rev-parse', '--show-toplevel']),
+    git(['status', '--porcelain', '-z', '--untracked-files=all']),
+    git(['log', '-n', '8', '--pretty=format:%h%x1f%s%x1f%ct%x1f%an']),
+    git(['rev-list', '--left-right', '--count', '@{u}...HEAD']),
+    git(['rev-parse', '--abbrev-ref', '@{u}']),
+    git(['diff', 'HEAD', '--numstat']),
   ])
+  // Without a status there is no truthful change list: keep the previous one.
+  if (top === undefined || status === undefined || status.exitCode !== 0) return
   const stats: Record<string, { added: number; removed: number }> = {}
-  for (const line of numstat.exitCode === 0 ? numstat.stdout.split('\n') : []) {
+  for (const line of numstat?.exitCode === 0 ? numstat.stdout.split('\n') : []) {
     const [a = '0', r = '0', ...rest] = line.split('\t')
     if (rest.length > 0) stats[rest.join('\t')] = { added: Number(a) || 0, removed: Number(r) || 0 }
   }
-  const commits = log.exitCode !== 0 ? [] : log.stdout.split('\n').filter(l => l !== '').map(l => {
+  const commits = log === undefined || log.exitCode !== 0 ? [] : log.stdout.split('\n').filter(l => l !== '').map(l => {
     const [hash = '', subject = '', ct = '0', author = ''] = l.split('\x1f')
     return { hash, subject, at: Number(ct) * 1000, author }
   })
-  const [behind = 0, ahead = 0] = counts.exitCode !== 0 ? [] : counts.stdout.trim().split(/\s+/).map(Number)
+  const [behind = 0, ahead = 0] = counts === undefined || counts.exitCode !== 0 ? [] : counts.stdout.trim().split(/\s+/).map(Number)
   const gitRoot = top.stdout.trim()
-  const changed = status.stdout.split('\n').filter(line => line.trim() !== '')
+  const changed = parseStatus(status.stdout)
   const gitMap: Record<string, string> = {}
   const lead = (xy: string) => xy[0] !== undefined && xy[0] !== ' ' && xy[0] !== '?'
-  const staged = changed.filter(l => lead(l.slice(0, 2))).length
-  const untracked = changed.filter(l => l.startsWith('??')).length
-  const unstaged = changed.filter(l => !l.startsWith('??') && l[1] !== ' ').length
-  for (const line of changed.slice(0, 500)) {
-    const raw = line.slice(3).split(' -> ').pop() ?? ''
-    const path = raw.replace(/^"|"$/g, '').replace(/\/$/, '')
-    gitMap[`${gitRoot}/${path}`] = gitCode(line.slice(0, 2))
-  }
-  const changes = changed.slice(0, 40).map(line => {
-    const path = (line.slice(3).split(' -> ').pop() ?? '').replace(/^"|"$/g, '')
-    return { path, code: gitCode(line.slice(0, 2)), added: stats[path]?.added ?? 0, removed: stats[path]?.removed ?? 0 }
-  })
+  const staged = changed.filter(one => lead(one.xy)).length
+  const untracked = changed.filter(one => one.xy === '??').length
+  const unstaged = changed.filter(one => one.xy !== '??' && one.xy[1] !== ' ').length
+  for (const one of changed.slice(0, 500)) gitMap[`${gitRoot}/${one.path.replace(/\/$/, '')}`] = gitCode(one.xy)
+  const changes = changed.slice(0, 40).map(one => ({
+    path: one.path,
+    code: gitCode(one.xy),
+    added: stats[one.path]?.added ?? 0,
+    removed: stats[one.path]?.removed ?? 0,
+  }))
+  if (mine !== gitRun) return
   await update($, panel, p => ({
     ...p,
     branch: head.stdout.trim(),
@@ -177,7 +201,7 @@ export async function refreshGit($: Dollar): Promise<void> {
     gitMap,
     ahead,
     behind,
-    upstream: upstream.exitCode === 0 ? upstream.stdout.trim() : '',
+    upstream: upstream?.exitCode === 0 ? upstream.stdout.trim() : '',
     staged,
     unstaged,
     untracked,
