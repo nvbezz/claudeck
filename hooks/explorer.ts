@@ -13,6 +13,35 @@ export type Row = { path: string; name: string; depth: number; kind: Entry['kind
 const IGNORED = new Set(['node_modules', '.git', '__pycache__', '.next', 'dist', 'build', 'target', '.venv', '.cache'])
 const MAX_ROWS = 400
 export const MAX_PREVIEW_BYTES = 1_000_000
+export const MAX_IMAGE_BYTES = 50_000_000
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'tif', 'tiff'])
+
+export const isImagePath = (path: string): boolean => {
+  const dot = path.lastIndexOf('.')
+  return dot > path.lastIndexOf('/') + 1 && IMAGE_EXTS.has(path.slice(dot + 1).toLowerCase())
+}
+
+// A name for the converted copy: the same file with the same size and time maps to the same picture, anything else does not.
+export const cacheKey = (path: string, size: number, mtimeMs: number): string => {
+  let h = 5381
+  for (const ch of `${path}\0${size}\0${Math.floor(mtimeMs)}`) h = ((h * 33) ^ ch.codePointAt(0)!) >>> 0
+  return h.toString(16).padStart(8, '0')
+}
+
+// The cell box a picture of this pixel size gets: its own proportions (a cell is about twice as tall as wide), never
+// bigger than the window, and not blown up past its pixels. Unknown size draws a 4:3 box.
+export const imageBox = (maxColumns: number, maxRows: number, width: number, height: number): { columns: number; rows: number } => {
+  const clamp = (n: number, max: number) => Math.max(1, Math.min(Math.min(255, Math.floor(max)), Math.round(n)))
+  const aspect = width > 0 && height > 0 ? height / width : 0.75
+  let columns = width > 0 ? Math.min(maxColumns, Math.max(8, Math.ceil(width / 8))) : maxColumns
+  let rows = (columns * aspect) / 2
+  if (rows > maxRows) {
+    rows = maxRows
+    columns = (rows * 2) / aspect
+  }
+
+  return { columns: clamp(columns, maxColumns), rows: clamp(rows, maxRows) }
+}
 // Rows the Archivos tab's fixed parts take: header (6 + margin), selection (2), tree frame (2), footer (1).
 export const TREE_FIXED_ROWS = 12
 export const treeHeight = (bodyRows: number): number => Math.max(6, bodyRows - TREE_FIXED_ROWS)
@@ -135,11 +164,58 @@ export async function openFile($: Dollar, path: string): Promise<void> {
   $.ui.toast(out !== undefined && out.exitCode === 0 ? `abriendo ${path.split('/').pop() ?? path}` : 'no se pudo abrir el archivo')
 }
 
+// ffprobe's "width,height" of the first frame, or undefined when it cannot tell.
+export const parseSize = (out: string): { width: number; height: number } | undefined => {
+  const [w, h] = out.trim().split('\n')[0]?.split(',').map(Number) ?? []
+  return w !== undefined && h !== undefined && Number.isInteger(w) && Number.isInteger(h) && w > 0 && h > 0 ? { width: w, height: h } : undefined
+}
+
+// The terminal draws a PNG file as it is; any other format goes through ffmpeg to a PNG in a private cache folder.
+async function previewImage($: Dollar, path: string, size: number, mtimeMs: number): Promise<void> {
+  if (!path.startsWith('/') || size > MAX_IMAGE_BYTES) {
+    $.ui.toast(size > MAX_IMAGE_BYTES ? 'imagen demasiado grande para previsualizar' : 'no se puede previsualizar este archivo')
+    return
+  }
+  const ck = cacheKey(path, size, mtimeMs)
+  const probe = await $.process
+    .run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path], { timeoutMs: 8000 })
+    .catch(() => undefined)
+  const dims = probe !== undefined && probe.exitCode === 0 ? parseSize(probe.stdout) : undefined
+  let file = path
+  if (!/\.png$/i.test(path)) {
+    const made = await convert($, path, ck)
+    if (made === undefined) {
+      $.ui.toast('no se pudo convertir la imagen (¿está ffmpeg instalado?)')
+      return
+    }
+    file = made
+  }
+  await update($, panel, p => ({
+    ...p,
+    explorer: { ...p.explorer, preview: { path, lines: [], image: { file, width: dims?.width ?? 0, height: dims?.height ?? 0 } } },
+  }))
+}
+
+// Runs ffmpeg into the private cache folder. The path it answers must be one of ours, whatever the script printed.
+async function convert($: Dollar, src: string, name: string): Promise<string | undefined> {
+  const script =
+    'd="/tmp/claudeck-$(id -u)"; mkdir -p -m 700 "$d" && [ -O "$d" ] && [ ! -L "$d" ] || exit 3; ' +
+    'ffmpeg -v error -y -i "$1" -frames:v 1 -vf "scale=w=1280:h=1280:force_original_aspect_ratio=decrease" "$d/$2.png" && printf %s "$d/$2.png"'
+  const made = await $.process.run(['sh', '-c', script, 'sh', src, name], { timeoutMs: 20000 }).catch(() => undefined)
+  if (made === undefined || made.exitCode !== 0 || !/^\/tmp\/claudeck-\d+\/[0-9a-f]{8}\.png$/.test(made.stdout)) return undefined
+
+  return made.stdout
+}
+
 export async function previewFile($: Dollar, path: string): Promise<void> {
   // Reading a video or an archive whole would stall the panel: cap what is previewed.
   const info = await $.fs.stat(path).catch(() => undefined)
   if (info === undefined || info.kind !== 'file') {
     $.ui.toast('no se puede previsualizar este archivo')
+    return
+  }
+  if (isImagePath(path)) {
+    await previewImage($, path, info.size, info.mtimeMs)
     return
   }
   if (info.size > MAX_PREVIEW_BYTES) {

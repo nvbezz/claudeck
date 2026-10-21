@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { readConfig } from './config'
-import { MAX_PREVIEW_BYTES, previewFile, visibleRows } from './explorer'
+import { MAX_IMAGE_BYTES, MAX_PREVIEW_BYTES, cacheKey, imageBox, isImagePath, parseSize, previewFile, visibleRows } from './explorer'
 import { clip, duration, effortView, project, spark, toMs, until, prettyModel } from './format'
 import { isSafeId } from './housekeeping'
 import { spentPerDay, series } from './history'
@@ -354,4 +354,134 @@ test('every pane draws on a hostile state, at any width', async ($, on) => {
     }
   }
   expect(true).toBe(true)
+})
+
+// ── image preview ──
+
+test('isImagePath knows pictures by extension, case-insensitively, and not hidden dotfiles', () => {
+  for (const ok of ['/a/b.png', '/a/B.JPG', '/x/y.jpeg', '/x/y.WebP', '/x/y.gif', '/x/ñandú vídeo.avif']) expect(isImagePath(ok)).toBe(true)
+  for (const no of ['/a/b.mp4', '/a/png', '/a/.png', '/a.d/png', '/a/b.png.txt', '', '/a/b.svg']) expect(isImagePath(no)).toBe(false)
+})
+
+test('cacheKey is stable per file state and changes with path, size or time', () => {
+  const k = cacheKey('/a/b.jpg', 100, 5000.9)
+  expect(k).toMatch(/^[0-9a-f]{8}$/)
+  expect(cacheKey('/a/b.jpg', 100, 5000.1)).toBe(k)
+  expect(cacheKey('/a/c.jpg', 100, 5000)).not.toBe(k)
+  expect(cacheKey('/a/b.jpg', 101, 5000)).not.toBe(k)
+  expect(cacheKey('/a/b.jpg', 100, 6000)).not.toBe(k)
+  expect(cacheKey('', 0, 0)).toMatch(/^[0-9a-f]{8}$/)
+})
+
+test('imageBox keeps proportions, fits the window and never leaves 1..255', () => {
+  const wide = imageBox(40, 20, 1920, 1080)
+  expect(wide.columns).toBe(40)
+  expect(wide.rows).toBe(11)
+  const tall = imageBox(40, 10, 1000, 4000)
+  expect(tall.rows).toBe(10)
+  expect(tall.columns).toBeLessThan(10)
+  const small = imageBox(80, 40, 64, 64)
+  expect(small.columns).toBe(8)
+  expect(small.rows).toBe(4)
+  for (const [mc, mr, w, h] of [[0, 0, 0, 0], [1, 1, 1, 1], [500, 500, 5000, 5000], [40, 20, -5, 10], [40, 20, NaN, NaN], [10, 20, 100000, 1], [10, 20, 1, 100000]] as const) {
+    const b = imageBox(mc, mr, w, h)
+    expect(b.columns).toBeGreaterThanOrEqual(1)
+    expect(b.columns).toBeLessThanOrEqual(255)
+    expect(b.rows).toBeGreaterThanOrEqual(1)
+    expect(b.rows).toBeLessThanOrEqual(255)
+    expect(Number.isInteger(b.columns) && Number.isInteger(b.rows)).toBe(true)
+  }
+  expect(imageBox(40, 20, 0, 0)).toEqual({ columns: 40, rows: 15 })
+})
+
+test('parseSize reads ffprobe output and refuses the rest', () => {
+  expect(parseSize('1920,1080\n')).toEqual({ width: 1920, height: 1080 })
+  expect(parseSize('800,600\n800,600\n')).toEqual({ width: 800, height: 600 })
+  for (const bad of ['', 'N/A,N/A', '0,10', '-5,10', '1.5,2', '10', ',', 'abc']) expect(parseSize(bad)).toBeUndefined()
+})
+
+const imageStub = (size: number, run: (argv: string[]) => unknown) => {
+  const toasts: string[] = []
+  const ran: string[][] = []
+  const $ = {
+    fs: { stat: async () => ({ kind: 'file', size, mtimeMs: 1 }), read: async () => 'x' },
+    process: {
+      run: async (argv: string[]) => {
+        ran.push(argv)
+        const out = run(argv)
+        return out instanceof Error ? Promise.reject(out) : out
+      },
+    },
+    ui: { toast: (t: string) => void toasts.push(t) },
+  }
+
+  return { $: $ as never, toasts, ran }
+}
+
+test('an image over the cap is refused before ffprobe or ffmpeg run', async () => {
+  const t = imageStub(MAX_IMAGE_BYTES + 1, () => ({ exitCode: 0, stdout: '', stderr: '' }))
+  await previewFile(t.$, '/p/huge.png')
+  expect(t.ran.length).toBe(0)
+  expect(t.toasts.length).toBe(1)
+})
+
+test('a failed conversion says so and never shows a path outside the private cache', async () => {
+  const gone = imageStub(10, () => new Error('no ffmpeg'))
+  await previewFile(gone.$, '/p/a.jpg')
+  expect(gone.toasts.some(m => m.includes('ffmpeg'))).toBe(true)
+  const failed = imageStub(10, argv => (argv[0] === 'sh' ? { exitCode: 1, stdout: '', stderr: 'bad' } : { exitCode: 0, stdout: '10,10', stderr: '' }))
+  await previewFile(failed.$, '/p/a.webp')
+  expect(failed.toasts.some(m => m.includes('ffmpeg'))).toBe(true)
+  // A converter that answers a path elsewhere (symlink trick, hostile script) is not trusted.
+  for (const stdout of ['/etc/passwd', '/tmp/claudeck-0/../../etc/x.png', '/tmp/other/aaaaaaaa.png', '/tmp/claudeck-1000/zz.png', '']) {
+    const hostile = imageStub(10, argv => (argv[0] === 'sh' ? { exitCode: 0, stdout, stderr: '' } : { exitCode: 0, stdout: '10,10', stderr: '' }))
+    await previewFile(hostile.$, '/p/a.gif')
+    expect(hostile.toasts.some(m => m.includes('ffmpeg'))).toBe(true)
+  }
+})
+
+test('the converter gets the path and key as arguments, never spliced into the script', async () => {
+  const evil = '/p/$(touch pwned) "; rm -rf ~; x.jpg'
+  const t = imageStub(10, argv => (argv[0] === 'sh' ? { exitCode: 1, stdout: '', stderr: '' } : { exitCode: 0, stdout: '10,10', stderr: '' }))
+  await previewFile(t.$, evil)
+  const sh = t.ran.find(a => a[0] === 'sh') ?? []
+  expect(sh.includes(evil)).toBe(true)
+  expect(sh[2]?.includes('pwned')).toBe(false)
+  expect(sh[2]?.includes('rm -rf')).toBe(false)
+  const probe = t.ran.find(a => a[0] === 'ffprobe') ?? []
+  expect(probe[probe.length - 1]).toBe(evil)
+})
+
+test('a relative or dash-leading path is never handed to ffprobe', async () => {
+  const t = imageStub(10, () => ({ exitCode: 0, stdout: '1,1', stderr: '' }))
+  await previewFile(t.$, '-rf.png')
+  await previewFile(t.$, 'rel/a.png')
+  expect(t.ran.length).toBe(0)
+  expect(t.toasts.length).toBe(2)
+})
+
+test('"ver" on a picture shows it in the explorer and "cerrar" brings the tree back', async ($, on) => {
+  const made = '/tmp/claudeck-1000/0123abcd.png'
+  stub(on, {
+    'fs.list': () => ({ value: [{ name: 'a.jpg', kind: 'file' }, { name: 'n.txt', kind: 'file' }] }),
+    'fs.stat': () => ({ value: { kind: 'file', size: 1000, mtimeMs: 1 } }),
+    'process.run': (_: unknown, e: { argv: string[] }) =>
+      e.argv[0] === 'ffprobe'
+        ? { value: { exitCode: 0, stdout: '640,360\n', stderr: '' } }
+        : e.argv[0] === 'sh' && e.argv[2]?.includes('ffmpeg')
+          ? { value: { exitCode: 0, stdout: made, stderr: '' } }
+          : { value: { exitCode: 1, stdout: '', stderr: '' } },
+  })
+  await start($)
+  await wait(100)
+  const ui = await $.ui.mount(pane('panel-files'))
+  await ui.press({ key: '/a.jpg' })
+  await ui.press({ key: 'view' })
+  await wait(50)
+  expect(await ui.find({ type: 'Image' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /640×360/ })).toBeTruthy()
+  await ui.press({ key: 'view' })
+  await wait(50)
+  expect(await ui.find({ type: 'Image' })).toBeFalsy()
+  await ui.unmount()
 })

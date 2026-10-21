@@ -12,8 +12,10 @@ export const isSafeId = (id: string): boolean => /^[A-Za-z0-9_-]{1,64}$/.test(id
 // Deletes the leftovers of sessions that died without a clean exit (crash, kill, closed terminal).
 export async function pruneStale($: Dollar): Promise<void> {
   const script =
-    'dir="$HOME/.claude/state"; [ -d "$dir" ] || exit 0; ' +
-    `find "$dir" -maxdepth 1 -type f \\( -name '${STATE_PATTERNS[0]}' -o -name '${STATE_PATTERNS[1]}' \\) -mtime +${STALE_DAYS - 1} -delete`
+    'dir="$HOME/.claude/state"; [ -d "$dir" ] && ' +
+    `find "$dir" -maxdepth 1 -type f \\( -name '${STATE_PATTERNS[0]}' -o -name '${STATE_PATTERNS[1]}' \\) -mtime +${STALE_DAYS - 1} -delete; ` +
+    // Converted picture previews: only this user's own private folder, and only what is a day old.
+    'pics="/tmp/claudeck-$(id -u)"; [ -d "$pics" ] && [ -O "$pics" ] && [ ! -L "$pics" ] && find "$pics" -maxdepth 1 -type f -name "*.png" -mtime +0 -delete; true'
   await $.process.run(['sh', '-c', script], { timeoutMs: 5000 }).catch(() => undefined)
 }
 

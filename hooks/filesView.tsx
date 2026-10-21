@@ -7,6 +7,7 @@ import {
   goDown,
   goHome,
   goUp,
+  imageBox,
   openFile,
   pickFile,
   previewFile,
@@ -34,7 +35,10 @@ const HOVER = { inverse: false, underline: true, bold: true } as const
 const GIT_COLOR: Record<string, string> = { M: 'warning', A: 'success', U: 'success', D: 'error', R: 'suggestion', '●': 'warning' }
 
 export async function renderFiles($: Dollar, e: RenderInputOf<'Pane', RenderSurface>, cfg: Config) {
-  const { Box, Text, Button, Code } = $.ui.resolve(e)
+  const ui = $.ui.resolve(e)
+  const { Box, Text, Button, Code } = ui
+  // Only the terminal surface draws pictures; any other shows the caption.
+  const Image = 'Image' in ui ? ui.Image : undefined
   const p = { ...INITIAL, ...(await read($, panel)) }
   const ex = { ...INITIAL.explorer, ...p.explorer }
   const rows = visibleRows(ex, p.gitMap)
@@ -158,7 +162,21 @@ export async function renderFiles($: Dollar, e: RenderInputOf<'Pane', RenderSurf
 
       <Box flexDirection="row" borderStyle="round" borderColor="subtle" paddingLeft={1} height={treeH + 2} flexShrink={0} overflow="hidden">
         <Box flexDirection="column" flexGrow={1} overflow="hidden">
-        {pv !== undefined ? (
+        {pv?.image !== undefined ? (
+          <Box flexDirection="column">
+            {(() => {
+              const img = pv.image
+              const box = imageBox(Math.max(4, (e.props.bodyColumns ?? cfg.width) - 6), treeH, img.width, img.height)
+              const alt = `${selName} · ${img.width}×${img.height}`
+
+              return Image === undefined ? (
+                <Text dimColor wrap="truncate">{alt}</Text>
+              ) : (
+                <Image key="preview-image" source={{ file: img.file, format: 'png' }} columns={box.columns} rows={box.rows} alt={alt} />
+              )
+            })()}
+          </Box>
+        ) : pv !== undefined ? (
           <Code source={pv.lines.slice(top, top + treeH).map(l => l.slice(pv.left ?? 0)).join('\n')} path={pv.path} startLine={top + 1} wrap="truncate-end" />
         ) : (
           <Box flexDirection="column">
@@ -195,20 +213,24 @@ export async function renderFiles($: Dollar, e: RenderInputOf<'Pane', RenderSurf
       </Box>
 
       <Box flexDirection="row" paddingX={1} gap={1} flexShrink={0}>
-        <Box key="b-pgup">
-          <Button key="pgup" plain hover={HOVER} onPress={page(-1)}><Text bold color={canUp ? 'claude' : 'subtle'}>▲</Text></Button>
-        </Box>
-        <Box key="b-pgdn">
-          <Button key="pgdn" plain hover={HOVER} onPress={page(1)}><Text bold color={canDown ? 'claude' : 'subtle'}>▼</Text></Button>
-        </Box>
-        {pv !== undefined && (
+        {pv?.image === undefined && (
+          <Box key="b-pgup">
+            <Button key="pgup" plain hover={HOVER} onPress={page(-1)}><Text bold color={canUp ? 'claude' : 'subtle'}>▲</Text></Button>
+          </Box>
+        )}
+        {pv?.image === undefined && (
+          <Box key="b-pgdn">
+            <Button key="pgdn" plain hover={HOVER} onPress={page(1)}><Text bold color={canDown ? 'claude' : 'subtle'}>▼</Text></Button>
+          </Box>
+        )}
+        {pv !== undefined && pv.image === undefined && (
           <Box key="b-left">
             <Button key="left" plain hover={HOVER} onPress={() => void shiftPreview($, -12)}>
               <Text bold color={(pv.left ?? 0) > 0 ? 'claude' : 'subtle'}>◀</Text>
             </Button>
           </Box>
         )}
-        {pv !== undefined && (
+        {pv !== undefined && pv.image === undefined && (
           <Box key="b-right">
             <Button key="right" plain hover={HOVER} onPress={() => void shiftPreview($, 12)}>
               <Text bold color={canRight ? 'claude' : 'subtle'}>▶</Text>
@@ -216,8 +238,8 @@ export async function renderFiles($: Dollar, e: RenderInputOf<'Pane', RenderSurf
           </Box>
         )}
         <Text dimColor wrap="truncate">
-          {total === 0 ? '' : `${top + 1}–${Math.min(total, top + treeH)} de ${total}`}
-          {pv !== undefined ? ` líneas${(pv.left ?? 0) > 0 ? ` · col ${(pv.left ?? 0) + 1}` : ''}` : ` · ${dirs} carpetas · ${rows.length - dirs} archivos`}
+          {pv?.image !== undefined ? `imagen${pv.image.width > 0 ? ` ${pv.image.width}×${pv.image.height}` : ''}` : total === 0 ? '' : `${top + 1}–${Math.min(total, top + treeH)} de ${total}`}
+          {pv?.image !== undefined ? '' : pv !== undefined ? ` líneas${(pv.left ?? 0) > 0 ? ` · col ${(pv.left ?? 0) + 1}` : ''}` : ` · ${dirs} carpetas · ${rows.length - dirs} archivos`}
         </Text>
       </Box>
     </Box>

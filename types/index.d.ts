@@ -9,7 +9,9 @@ export type Check = { label: string; isOk: boolean; at: number }
 export type Limit = { kind: string; percent: number; resetsAt: string | undefined }
 export type Sample = { t: number; p: number }
 export type Entry = { name: string; kind: 'file' | 'dir' | 'other' }
-export type Preview = { path: string; lines: string[]; top?: number; left?: number }
+// `file` is the PNG the terminal draws; `width` and `height` are the original's pixels (0 when unknown).
+export type PreviewImage = { file: string; width: number; height: number }
+export type Preview = { path: string; lines: string[]; top?: number; left?: number; image?: PreviewImage }
 export type Change = { path: string; code: string; added: number; removed: number }
 export type Explorer = {
   offset: number
